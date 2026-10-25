@@ -1,0 +1,278 @@
+# Schema 与 JSON-RPC 签名系统设计总结
+
+
+## 0. 背景
+
+在 JSON-RPC 中，有 3 类 schema:
+
+1. typescript: 代码中的各种 type/interface 定义，用于在开发时，校验（IDE）代码的正确性；
+2. zod-schema: 用于JavaScript在运行时，校验函数参数的合法性；
+3. json-schema: 用于当远程方法被调用时，校验客户端发来的 JSON 数据。
+  + 校验 request
+  + 校验/转换 params
+
+这里实现的是 json-schema。它只用于纯 JSON 数据的校验。
+
+## 1. 设计目标
+
+实现一个轻量、可扩展的 Schema 系统，用于描述和验证在 JSON-RPC 调用过程中使用的 JSON 数据。
+
+它将用于:
+
+1. 协议层的 Request 数据的校验；
+
+``` js
+const RequestSchema = s.object({
+  jsonrpc: s.literal('2.0'),
+  method: s.string().min(1),
+  params: s.array(z.unknown()).nullable(),
+  id: s.union([s.string().min(1), z.number()]),
+}).struct();
+```
+
+2. 远程方法注册时 signature 部分的定义和校验；
+
+``` js
+repository.register(
+    { 
+        namespace: 'ping', 
+        document: 'sum of numbers',
+        grantTo: ['grant'], 
+        signature: [s.void(), s.stirng().describe("param1")]   <<<
+    }: Descriptor, 
+    (v: string) => v
+);
+
+
+repository.register(
+    { 
+        namespace: 'ping', 
+        document: (descriptor) => {
+        },
+        grantTo: ['grant'], 
+        signature: [s.void(), s.stirng().describe("param1")]   <<<
+    }: Descriptor, 
+    (v: string) => v
+);
+```
+
+
+``` js
+
+```
+
+
+核心目标：
+
+- 类型安全：Schema 能推导对应的 TypeScript 类型。
+- 运行时验证：校验客户端参数、注入参数和方法返回值。
+- 结构化描述：Schema 和 RPC 签名都能导出人类可读、机器可处理的说明。
+- 易于扩展：允许通过继承创建自定义 Schema。
+- 简洁 API：使用 `s.string()`、`s.object()` 等工厂方法构建 Schema。
+- 控制逻辑与数据类型分离：RPC 的 `void` 和注入参数不属于普通 JSON Schema。
+
+## 2. Schema 类型体系
+
+采用统一的 `*Schema` 命名，避免与 JavaScript 内置类型冲突。
+
+| 类名                         | 工厂方法               | 用途                               |
+| -------------------------- | ------------------ | -------------------------------- |
+| `Schema<T>`                | —                  | 所有 Schema 的抽象基类                  |
+| `NullableCapableSchema<T>` | —                  | 为普通 JSON Schema 提供 `.nullable()` |
+| `StringSchema`             | `s.string()`       | 字符串                              |
+| `NumberSchema`             | `s.number()`       | 有限数字                             |
+| `BooleanSchema`            | `s.boolean()`      | 布尔值                              |
+| `LiteralSchema`            | `s.literal(value)` | 字面量                              |
+| `ArraySchema`              | `s.array(schema)`  | 数组                               |
+| `ObjectSchema`             | `s.object(shape)`  | 对象                               |
+| `RecordSchema`             | `s.record(schema)` | 键值映射                             |
+| `UnionSchema`              | `s.union(schemas)` | 联合类型                             |
+| `EnumSchema`               | `s.enum(values)`   | 字符串枚举                            |
+| `UnknownSchema`            | `s.unknown()`      | 任意合法 JSON 值                      |
+| `NullableSchema<T>`        | `.nullable()` 的返回值 | 接受原类型或 `null`                    |
+
+另外，RPC 专用控制标记为：
+
+- `VoidMarker`：表示 RPC 方法没有返回值。
+- `InjectableMarker`：表示参数由服务端注入，而非客户端提供。
+
+## 3. JSON 数据规则
+
+### `s.unknown()`
+
+`UnknownSchema` 接受所有合法 JSON 值：
+
+- `null`
+- 字符串
+- 有限数字
+- 布尔值
+- 数组
+- 普通对象
+
+拒绝 `undefined`、`NaN`、`Infinity`、函数及循环引用等非 JSON 数据。
+
+它直接继承 `Schema<JSONValue>`，不提供 `.nullable()`，因为 `null` 本身已经在接受范围内。
+
+### `.nullable()`
+
+普通 JSON Schema 默认不接受 `null`，需要显式调用：
+
+```
+s.string();          // string
+s.string().nullable(); // string | null
+s.number().nullable(); // number | null
+```
+
+`describe()` 是通用能力，普通 Schema 和 `UnknownSchema` 都支持。
+
+### `.min()` 与 `.max()`
+
+| 类型     | 约束对象  | 参数要求      |
+| ------ | ----- | --------- |
+| 字符串    | 字符数   | 非负整数      |
+| 数字     | 数值上下界 | 有限数字，可为负数 |
+| 数组     | 元素数量  | 非负整数      |
+| Record | 对象键数量 | 非负整数      |
+
+同一约束重复设置时，以最后一次调用为准。例如：
+
+```
+s.string().min(1).min(3); // 最小长度为 3
+```
+
+### 对象的 `.strict()`
+
+本设计采用约定的自定义语义：
+
+- 默认模式：声明的属性可以缺失，额外属性允许存在并保留。
+- `strict()` 模式：声明的属性必须全部存在，并且拒绝额外属性。
+
+```
+s.object({
+  name: s.string(),
+});
+
+s.object({
+  name: s.string(),
+}).strict();
+```
+
+注意：这里的 `strict()` 同时影响必需属性和额外属性处理，这是本项目的约定，不应直接等同于 Zod 的标准语义。
+
+## 4. 扩展机制
+
+自定义 Schema 可以继承抽象基类或具体 Schema。
+
+例如，继承字符串 Schema 创建邮箱类型：
+
+```
+class EmailSchema extends StringSchema {
+  // 可增加邮箱专属验证和方法
+}
+```
+
+这样可以复用字符串的 `.min()`、`.max()` 和基础验证能力。
+
+需要注意，实际扩展时必须保证自定义验证逻辑与 Schema 描述、类型推导和约束状态保持一致；如果需要复制 Schema 或实现不可变链式 API，也应统一设计，避免扩展类丢失已有约束。
+
+## 5. RPC 签名设计
+
+RPC 签名采用元组结构：
+
+```
+[
+  returnSchema,
+  parameterSchema1,
+  parameterSchema2,
+]
+```
+
+规则如下：
+
+1. 第一个元素始终是返回值 Schema 或 `s.void()`。
+2. 后续元素表示方法参数。
+3. 普通 Schema 参数由客户端传入。
+4. `s.injectable(key)` 参数由服务端解析器提供。
+5. `VoidMarker` 和 `InjectableMarker` 不是普通 JSON Schema，不能作为 JSON 数据 Schema 嵌套使用。
+
+例如：
+
+```
+[
+  s.string(),
+  s.string(),
+  s.injectable("requestId"),
+  s.number(),
+] as const
+```
+
+表示返回字符串、接收一个字符串客户端参数、注入一个 `requestId`，再接收一个数字客户端参数。
+
+## 6. `JSONRPC2Repository` 的职责
+
+`signature.ts` 中的仓库类负责 RPC 方法注册与执行。
+
+| 方法                                   | 职责                           |
+| ------------------------------------ | ---------------------------- |
+| `provide(key, resolver)`             | 注册服务端注入值的解析器                 |
+| `register(name, signature, handler)` | 注册 RPC 方法                    |
+| `has(name)`                          | 判断方法是否注册                     |
+| `getSignature(name)`                 | 获取原始签名                       |
+| `describe(name)`                     | 获取单个方法的结构化描述                 |
+| `describeAll()`                      | 获取全部方法描述                     |
+| `execute(name, params, context)`     | 验证参数、解析注入值、执行 handler 并验证返回值 |
+
+执行流程：
+
+接收 RPC 调用
+
+方法名、客户端参数、请求上下文
+
+检查方法与客户端参数数量
+
+验证客户端参数并解析注入参数
+
+执行 handler
+
+验证返回值并返回结果
+
+## 7. 描述与文档生成
+
+每个 Schema 提供 `toJSON()`，返回结构化描述，包含：
+
+- `kind`：类型标识。
+- `description`：人类可读说明。
+- `nullable`：是否接受 `null`。
+- `constraints`：长度、范围、枚举值、严格模式等约束。
+- `children`：对象属性、数组元素、联合类型成员等子 Schema。
+
+`JSONRPC2Repository.describe()` 则进一步输出 RPC 方法的参数来源、注入键、参数 Schema 和返回值 Schema。
+
+`formatSignature()` 可以将结构化描述转换为简洁文本，例如：
+
+```
+greet(name: string, requestId: <injectable>) => string
+```
+
+## 8. 文件划分
+
+建议保持两个核心文件：
+
+- `schema.ts`：Schema 类型体系、校验逻辑、结构化描述、工厂 `s`。
+- `signature.ts`：RPC 签名类型、方法注册、依赖注入、执行流程和签名格式化。
+
+测试可以单独放在对应的测试文件中，不必进一步拆分核心实现，除非后续复杂度明显增加。
+
+## 9. 后续实现前需要验证的事项
+
+当前代码是设计实现的初稿，正式使用前建议优先处理以下问题：
+
+1. 修正 `.strict()` 的类型与运行时一致性：当前实现会修改对象实例状态并通过类型断言改变返回类型；更稳妥的实现应返回独立的严格模式实例。
+2. 统一错误路径：数组、对象和 `NullableSchema` 应使用一致的路径组合规则，避免重复路径。
+3. 完善扩展类的约束继承：验证自定义 Schema 继承后，已有约束、描述及链式调用是否都能正确保留。
+4. 明确注入值的验证策略：当前实现只验证客户端参数和返回值，注入值尚未经过独立的 Schema 验证。若注入值需要强类型保证，应为注入标记增加可选的值 Schema，或者提供类型安全的解析器注册机制。
+5. 明确 `void` 的返回值规则：当前实现忽略 handler 的实际返回值并返回 `undefined`。如果希望检测错误地返回了非 `undefined` 的值，需要额外增加运行时检查。
+6. 验证 TypeScript 编译结果：重点检查元组推导、对象严格模式类型、扩展类以及 `InjectableTypes` 的类型合并行为。
+7. 增加回归测试：覆盖正常输入、边界值、非法 JSON 值、嵌套错误路径、注入顺序、重复注册、缺失解析器和返回值验证失败。
+
+总体上，核心设计已经明确：Schema 负责 JSON 数据的定义与验证，RPC 签名负责方法参数和返回值的组织，注入标记负责连接服务端上下文。 三者职责分离，后续扩展会比较直接。

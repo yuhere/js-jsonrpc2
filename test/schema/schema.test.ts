@@ -1,0 +1,609 @@
+import { describe, expect, it } from "vitest";
+import {
+    s,
+    Schema,
+    SchemaValidationError,
+    StringSchema,
+    UnknownSchema,
+    JSONValue,
+} from "../../src/schema/json";
+
+describe("StringSchema", () => {
+    it("accepts strings", () => {
+        expect(s.string().parse("hello")).toBe("hello");
+        expect(s.string().parse("")).toBe("");
+    });
+
+    it("rejects non-string values", () => {
+        const schema = s.string();
+
+        for (const value of [123, true, null, {}, []]) {
+            expect(() => schema.parse(value)).toThrow(SchemaValidationError);
+        }
+    });
+
+    it("supports min and max length", () => {
+        const schema = s.string().min(2).max(4);
+
+        expect(schema.parse("ab")).toBe("ab");
+        expect(schema.parse("abcd")).toBe("abcd");
+
+        expect(() => schema.parse("a")).toThrow();
+        expect(() => schema.parse("abcde")).toThrow();
+    });
+
+    it("uses the latest min/max value", () => {
+        const schema = s.string().min(1).min(3).max(10).max(5);
+
+        expect(schema.parse("abc")).toBe("abc");
+        expect(() => schema.parse("ab")).toThrow();
+        expect(() => schema.parse("abcdef")).toThrow();
+    });
+
+    it("rejects invalid min/max configuration", () => {
+        expect(() => s.string().min(-1)).toThrow(TypeError);
+        expect(() => s.string().max(1.5)).toThrow(TypeError);
+        expect(() => s.string().min(Number.NaN)).toThrow(TypeError);
+    });
+
+    it("supports describe()", () => {
+        const schema = s.string().min(2).describe("User name");
+
+        expect(schema.toJSON()).toMatchObject({
+            kind: "string",
+            description: "User name",
+            constraints: { min: 2 },
+        });
+    });
+});
+
+describe("NumberSchema", () => {
+    it("accepts finite numbers", () => {
+        expect(s.number().parse(0)).toBe(0);
+        expect(s.number().parse(-5)).toBe(-5);
+        expect(s.number().parse(3.14)).toBe(3.14);
+    });
+
+    it("rejects non-numbers and non-finite numbers", () => {
+        const schema = s.number();
+
+        for (const value of [
+            "1",
+            true,
+            null,
+            Number.NaN,
+            Number.POSITIVE_INFINITY,
+            Number.NEGATIVE_INFINITY,
+        ]) {
+            expect(() => schema.parse(value)).toThrow(SchemaValidationError);
+        }
+    });
+
+    it("supports negative min/max bounds", () => {
+        const schema = s.number().min(-10).max(-1);
+
+        expect(schema.parse(-10)).toBe(-10);
+        expect(schema.parse(-5)).toBe(-5);
+        expect(schema.parse(-1)).toBe(-1);
+
+        expect(() => schema.parse(-11)).toThrow();
+        expect(() => schema.parse(0)).toThrow();
+    });
+
+    it("allows finite decimal bounds", () => {
+        const schema = s.number().min(1.5).max(2.5);
+
+        expect(schema.parse(1.5)).toBe(1.5);
+        expect(schema.parse(2.5)).toBe(2.5);
+        expect(() => schema.parse(1.4)).toThrow();
+    });
+
+    it("rejects non-finite configuration bounds", () => {
+        expect(() => s.number().min(Number.NaN)).toThrow(TypeError);
+        expect(() =>
+            s.number().max(Number.POSITIVE_INFINITY),
+        ).toThrow(TypeError);
+    });
+});
+
+describe("BooleanSchema", () => {
+    it("accepts true and false", () => {
+        expect(s.boolean().parse(true)).toBe(true);
+        expect(s.boolean().parse(false)).toBe(false);
+    });
+
+    it("rejects non-boolean values", () => {
+        for (const value of [0, 1, "true", null, {}]) {
+            expect(() => s.boolean().parse(value)).toThrow();
+        }
+    });
+});
+
+describe("LiteralSchema", () => {
+    it("accepts only the specified literal", () => {
+        expect(s.literal("hello").parse("hello")).toBe("hello");
+        expect(s.literal(42).parse(42)).toBe(42);
+        expect(s.literal(true).parse(true)).toBe(true);
+        expect(s.literal(null).parse(null)).toBe(null);
+
+        expect(() => s.literal("hello").parse("world")).toThrow();
+        expect(() => s.literal(42).parse("42")).toThrow();
+        expect(() => s.literal(true).parse(1)).toThrow();
+    });
+
+    it("uses exact literal equality", () => {
+        expect(() => s.literal(0).parse(-0)).not.toThrow();
+        expect(() => s.literal(false).parse(0)).toThrow();
+    });
+
+    it("describes its literal value", () => {
+        expect(s.literal("jsonrpc").toJSON()).toMatchObject({
+            kind: "literal",
+            constraints: { value: "jsonrpc" },
+        });
+    });
+});
+
+describe("ArraySchema", () => {
+    it("accepts arrays and validates each item", () => {
+        expect(s.array(s.string()).parse(["a", "b"])).toEqual(["a", "b"]);
+        expect(s.array(s.number()).parse([1, 2, 3])).toEqual([1, 2, 3]);
+        expect(s.array(s.unknown()).parse([null, "x", 1])).toEqual([
+            null,
+            "x",
+            1,
+        ]);
+    });
+
+    it("rejects non-arrays and invalid items", () => {
+        expect(() => s.array(s.string()).parse("abc")).toThrow();
+        expect(() => s.array(s.string()).parse(["a", 1])).toThrow();
+    });
+
+    it("supports min/max item count", () => {
+        const schema = s.array(s.number()).min(1).max(2);
+
+        expect(schema.parse([1])).toEqual([1]);
+        expect(schema.parse([1, 2])).toEqual([1, 2]);
+
+        expect(() => schema.parse([])).toThrow();
+        expect(() => schema.parse([1, 2, 3])).toThrow();
+    });
+
+    it("rejects invalid min/max configuration", () => {
+        expect(() => s.array(s.string()).min(-1)).toThrow(TypeError);
+        expect(() => s.array(s.string()).max(1.2)).toThrow(TypeError);
+    });
+
+    it("describes its item schema", () => {
+        expect(s.array(s.string()).toJSON()).toMatchObject({
+            kind: "array",
+            children: {
+                items: { kind: "string" },
+            },
+        });
+    });
+});
+
+describe("ObjectSchema", () => {
+    const schema = s.object({
+        name: s.string(),
+        age: s.number(),
+    });
+
+    it("validates declared properties", () => {
+        expect(schema.parse({ name: "Alice", age: 20 })).toEqual({
+            name: "Alice",
+            age: 20,
+        });
+    });
+
+    it("allows missing declared properties by default", () => {
+        expect(schema.parse({ name: "Alice" })).toEqual({
+            name: "Alice",
+        });
+
+        expect(schema.parse({})).toEqual({});
+    });
+
+    it("allows and preserves extra JSON properties by default", () => {
+        expect(
+            schema.parse({
+                name: "Alice",
+                extra: { enabled: true },
+            }),
+        ).toEqual({
+            name: "Alice",
+            extra: { enabled: true },
+        });
+    });
+
+    it("rejects invalid declared properties", () => {
+        expect(() => schema.parse({ name: 123 })).toThrow();
+        expect(() => schema.parse({ age: "20" })).toThrow();
+    });
+
+    it("rejects arrays, null and primitives", () => {
+        for (const value of [null, [], "text", 123, true]) {
+            expect(() => schema.parse(value)).toThrow();
+        }
+    });
+
+    it("strict mode requires all declared properties", () => {
+        const strictSchema = s.object({
+            name: s.string(),
+            age: s.number(),
+        }).strict();
+
+        expect(strictSchema.parse({ name: "Alice", age: 20 })).toEqual({
+            name: "Alice",
+            age: 20,
+        });
+
+        expect(() => strictSchema.parse({ name: "Alice" })).toThrow();
+        expect(() => strictSchema.parse({ age: 20 })).toThrow();
+        expect(() => strictSchema.parse({})).toThrow();
+    });
+
+    it("strict mode rejects extra properties", () => {
+        const strictSchema = s.object({
+            name: s.string(),
+        }).strict();
+
+        expect(() => strictSchema.parse({
+            name: "Alice",
+            extra: true,
+        })).toThrow();
+    });
+
+    it("supports nested objects and arrays", () => {
+        const nested = s.object({
+            user: s.object({
+                name: s.string(),
+            }).strict(),
+            tags: s.array(s.string()),
+        });
+
+        expect(
+            nested.parse({
+                user: { name: "Alice" },
+                tags: ["admin", "active"],
+            }),
+        ).toEqual({
+            user: { name: "Alice" },
+            tags: ["admin", "active"],
+        });
+    });
+
+    it("describes object properties and strict mode", () => {
+        expect(
+            s.object({ name: s.string() }).strict().toJSON(),
+        ).toMatchObject({
+            kind: "object",
+            constraints: { strict: true },
+            children: {
+                properties: {
+                    name: { kind: "string" },
+                },
+            },
+        });
+    });
+});
+
+describe("RecordSchema", () => {
+    it("validates all values using the value schema", () => {
+        const schema = s.record(s.number());
+
+        expect(schema.parse({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 });
+        expect(schema.parse({})).toEqual({});
+        expect(() => schema.parse({ a: "1" })).toThrow();
+    });
+
+    it("rejects non-record inputs", () => {
+        const schema = s.record(s.string());
+
+        for (const value of [null, [], "text", 123, true]) {
+            expect(() => schema.parse(value)).toThrow();
+        }
+    });
+
+    it("supports min/max key counts", () => {
+        const schema = s.record(s.string()).min(1).max(2);
+
+        expect(schema.parse({ a: "x" })).toEqual({ a: "x" });
+        expect(schema.parse({ a: "x", b: "y" })).toEqual({
+            a: "x",
+            b: "y",
+        });
+
+        expect(() => schema.parse({})).toThrow();
+        expect(() => schema.parse({ a: "x", b: "y", c: "z" })).toThrow();
+    });
+
+    it("rejects invalid min/max configuration", () => {
+        expect(() => s.record(s.string()).min(-1)).toThrow(TypeError);
+        expect(() => s.record(s.string()).max(1.1)).toThrow(TypeError);
+    });
+
+    it("describes its value schema", () => {
+        expect(s.record(s.number()).toJSON()).toMatchObject({
+            kind: "record",
+            children: {
+                values: { kind: "number" },
+            },
+        });
+    });
+});
+
+describe("UnionSchema", () => {
+    it("accepts values matching any member", () => {
+        const schema = s.union([s.string(), s.number()]);
+
+        expect(schema.parse("hello")).toBe("hello");
+        expect(schema.parse(123)).toBe(123);
+    });
+
+    it("rejects values matching no member", () => {
+        const schema = s.union([s.string(), s.number()]);
+
+        expect(() => schema.parse(true)).toThrow(SchemaValidationError);
+        expect(() => schema.parse(null)).toThrow(SchemaValidationError);
+    });
+
+    it("supports literal and object members", () => {
+        const schema = s.union([
+            s.literal("none"),
+            s.object({ id: s.number() }).strict(),
+        ]);
+
+        expect(schema.parse("none")).toBe("none");
+        expect(schema.parse({ id: 1 })).toEqual({ id: 1 });
+        expect(() => schema.parse({ id: "1" })).toThrow();
+    });
+
+    it("describes all union options", () => {
+        expect(s.union([s.string(), s.number()]).toJSON()).toMatchObject({
+            kind: "union",
+            children: {
+                options: [{ kind: "string" }, { kind: "number" }],
+            },
+        });
+    });
+});
+
+
+describe("TupleSchema", () => {
+    it("test 1", () => {
+        const schema = s.tuple([
+            s.string(),
+            s.number(),
+            s.boolean(),
+        ]);
+        console.log(schema.parse(["hello", 42, true]));     // 通过 
+        expect(() => schema.parse(["hello", 42])).toThrow(SchemaValidationError);   // 长度不一致
+        expect(() => schema.parse(["hello", "42", true])).toThrow(SchemaValidationError);   // 第二项类型不匹配
+        expect(() => schema.parse("hello")).toThrow(SchemaValidationError);   // 不是数组
+    });
+});
+
+describe("EnumSchema", () => {
+    it("accepts declared enum values", () => {
+        const schema = s.enum(["pending", "success", "failed"]);
+
+        expect(schema.parse("pending")).toBe("pending");
+        expect(schema.parse("success")).toBe("success");
+        expect(schema.parse("failed")).toBe("failed");
+    });
+
+    it("rejects undeclared values and non-strings", () => {
+        const schema = s.enum(["red", "green", "blue"]);
+
+        expect(() => schema.parse("yellow")).toThrow();
+        expect(() => schema.parse(1)).toThrow();
+        expect(() => schema.parse(null)).toThrow();
+    });
+
+    it("describes enum values", () => {
+        expect(s.enum(["a", "b"]).toJSON()).toMatchObject({
+            kind: "enum",
+            constraints: { values: ["a", "b"] },
+        });
+    });
+});
+
+describe("UnknownSchema", () => {
+    it("accepts all JSON value categories", () => {
+        const schema = s.unknown();
+
+        const values: JSONValue[] = [
+            null,
+            "text",
+            "",
+            0,
+            -10,
+            1.25,
+            true,
+            false,
+            [],
+            [null, "text", 1, false],
+            {},
+            { nested: { value: null } },
+        ];
+
+        for (const value of values) {
+            expect(schema.parse(value)).toEqual(value);
+        }
+    });
+
+    it("rejects undefined and non-JSON primitive values", () => {
+        const schema = s.unknown();
+
+        for (const value of [
+            undefined,
+            1n,
+            Symbol("x"),
+            () => 1,
+            Number.NaN,
+            Number.POSITIVE_INFINITY,
+            Number.NEGATIVE_INFINITY,
+        ]) {
+            expect(() => schema.parse(value)).toThrow(SchemaValidationError);
+        }
+    });
+
+    it("rejects circular references", () => {
+        const value: Record<string, unknown> = {};
+        value.self = value;
+
+        expect(() => s.unknown().parse(value)).toThrow(/Circular references/);
+    });
+
+    it("rejects sparse arrays", () => {
+        const value = new Array(2);
+        value[1] = "present";
+
+        expect(() => s.unknown().parse(value)).toThrow(/Sparse arrays/);
+    });
+
+    it("rejects non-plain objects", () => {
+        expect(() => s.unknown().parse(new Date())).toThrow();
+        expect(() => s.unknown().parse(new Map())).toThrow();
+    });
+
+    it("supports describe but not nullable", () => {
+        const schema = s.unknown().describe("Any JSON value");
+
+        expect(schema.toJSON()).toMatchObject({
+            kind: "unknown",
+            description: "Any JSON value",
+        });
+
+        expect(schema).toBeInstanceOf(UnknownSchema);
+
+        // 编译期检查由下面的类型测试覆盖。
+    });
+});
+
+describe("NullableSchema", () => {
+    it("accepts null and values accepted by the inner schema", () => {
+        const stringSchema = s.string().nullable();
+
+        expect(stringSchema.parse(null)).toBe(null);
+        expect(stringSchema.parse("hello")).toBe("hello");
+        expect(() => stringSchema.parse(123)).toThrow();
+    });
+
+    it("works with arrays, objects, unions and enums", () => {
+        expect(s.array(s.number()).nullable().parse(null)).toBe(null);
+
+        expect(
+            s.object({ name: s.string() }).nullable().parse(null),
+        ).toBe(null);
+
+        expect(s.union([s.string(), s.number()]).nullable().parse(null)).toBe(
+            null,
+        );
+
+        expect(s.enum(["a", "b"]).nullable().parse(null)).toBe(null);
+    });
+
+    it("describes nullable schemas", () => {
+        expect(s.string().nullable().toJSON()).toMatchObject({
+            kind: "nullable",
+            nullable: true,
+            children: {
+                inner: { kind: "string" },
+            },
+        });
+    });
+});
+
+describe("Schema base behavior", () => {
+    it("safeParse returns a success result for valid input", () => {
+        expect(s.string().safeParse("ok")).toEqual({
+            success: true,
+            data: "ok",
+        });
+    });
+
+    it("safeParse returns an error result for invalid input", () => {
+        const result = s.string().safeParse(123);
+
+        expect(result.success).toBe(false);
+
+        if (!result.success) {
+            expect(result.error).toBeInstanceOf(SchemaValidationError);
+        }
+    });
+
+    it("parse throws SchemaValidationError for invalid input", () => {
+        expect(() => s.string().parse(123)).toThrow(SchemaValidationError);
+    });
+
+    it("supports describe on multiple Schema kinds", () => {
+        expect(s.number().describe("Age").toJSON().description).toBe("Age");
+        expect(s.boolean().describe("Enabled").toJSON().description).toBe(
+            "Enabled",
+        );
+    });
+
+    it("rejects nullable calls on UnknownSchema at compile time", () => {
+        const schema = s.unknown();
+        schema.parse(null);
+        schema.describe("Any JSON value");
+        // @ts-ignore
+        expect(() => schema.nullable()).toThrow(TypeError);
+    });
+});
+
+describe("Schema extension", () => {
+
+    class EmailSchema extends StringSchema<"email"> {
+
+        override readonly kind = "email";
+
+        constructor() {
+            super();
+        }
+
+    }
+
+    it("allows custom classes to extend concrete schemas", () => {
+        const email = new EmailSchema().min(5).describe("Email address");
+
+        expect(email.parse("a@b.c")).toBe("a@b.c");
+        expect(email.toJSON()).toMatchObject({
+            kind: "email",
+            description: "Email address",
+            constraints: { min: 5 },
+        });
+    });
+
+    it("allows custom schemas to extend the abstract base", () => {
+        class EvenNumberSchema extends Schema<number> {
+            readonly kind = "even-number" as const;
+
+            constructor() {
+                super();
+            }
+
+            protected _parse(input: unknown): number {
+                if (typeof input !== "number" || input % 2 !== 0) {
+                    throw new SchemaValidationError("Expected an even number");
+                }
+
+                return input;
+            }
+
+            protected _describe() {
+                return { kind: "even-number" as const, constraints: { even: true } };
+            }
+        }
+
+        const even = new EvenNumberSchema();
+
+        expect(even.parse(2)).toBe(2);
+        expect(() => even.parse(3)).toThrow();
+        expect(even.toJSON().constraints).toEqual({ even: true });
+    });
+});

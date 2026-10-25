@@ -1,0 +1,93 @@
+{
+  "name": "@yuhere/js-jsonrpc2",
+  "version": "2.1.3",
+  "description": "A TypeScript JSON-RPC 2.0 server library with schema validation, authorization, dependency injection, and multiple transports.",
+  "homepage": "https://github.com/yuhere/js-jsonrpc2#readme",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "author": {
+    "name": "yuhere@gmail.com"
+  },
+  "bugs": {
+    "url": "https://github.com/yuhere/js-jsonrpc2/issues"
+  },
+  "files": [
+    "dist",
+    "htdoc",
+    "webui",
+    "dev",
+    "SKILL.md",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yuhere/js-jsonrpc2.git"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "js-jsonrpc2": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "clean && npm run build:lib && npm run build:webui",
+    "build:lib": "tsc -p tsconfig.build.json && tsc-esm-fix",
+    "build:webui": "tsc -p webui//tsconfig.json && vite build --config webui/vite.config.ts",
+    "dev": "run-p dev:lib dev:webui",
+    "dev:lib": "tsx src/cli/express.ts",
+    "dev:webui": "vite build --config webui/vite.config.ts --watch --mode development",
+    "typecheck": "npm run typecheck:lib && npm run typecheck:webui",
+    "typecheck:lib": "tsc --noEmit",
+    "typecheck:webui": "tsc -p webui/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rm -rf dist htdoc/assets htdoc/index.html"
+  },
+  "keywords": [
+    "json-rpc",
+    "jsonrpc",
+    "jsonrpc2",
+    "express",
+    "middleware",
+    "typescript",
+    "zod"
+  ],
+  "devDependencies": {
+    "@types/body-parser": "^1.19.6",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/supertest": "^7.2.1",
+    "@types/type-is": "^1.6.7",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/coverage-v8": "^5.0.5",
+    "npm-run-all": "^4.1.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "supertest": "^7.3.1",
+    "tsc-esm-fix": "^3.1.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "body-parser": "^2.4.0",
+    "express": "^5.3.0",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
+  }
+}
