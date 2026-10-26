@@ -4,7 +4,7 @@ import { Repository } from '../../core/Repository';
 import { INTERNAL_ERROR, PARSE_ERROR } from '../../errors/codes';
 import type {
   InjectableFactory,
-  Injectables,
+  Injections,
   RPCErrorTransform,
   RPCResponse,
   RPCStreamChunk,
@@ -149,7 +149,7 @@ export async function serveStdio(
 interface StdioContext {
   repository: Repository;
   options: StdioOptions;
-  injectables: Injectables;
+  injectables: Injections;
   writeChain: () => Promise<void>;
   setWriteChain: (p: Promise<void>) => void;
   output: Writable;
@@ -265,16 +265,18 @@ async function enqueueWrite(
 function buildInjectables(
   factory: InjectableFactory | undefined,
   repository: Repository,
-): Injectables {
-  if (typeof factory === 'function') {
-    // No HTTP req/res in stdio; pass through placeholder values.
-    return factory(undefined, undefined, repository);
-  }
-  return {
-    repository,
-    input: process.stdin,
-    output: process.stdout,
-  };
+): Injections {
+  const injections = typeof factory === 'function'
+    ? factory({
+      input: process.stdin,
+      output: process.stdout
+    }, repository)
+    : {
+      repository,
+      input: process.stdin,
+      output: process.stdout,
+    }
+  return { ...injections, injections: injections };
 }
 
 function fallbackFailure(error: unknown): RPCResponse {

@@ -1,12 +1,12 @@
 import { RPCError } from '../errors/RPCError';
 import { INVALID_PARAMS } from '../errors/codes';
 import type { MethodDescriptor } from './descriptor';
-import type { Injectables } from '../types';
+import type { Injections } from '../types';
 
 export async function convertParams(
   descriptor: MethodDescriptor,
   params: unknown,
-  injections: Injectables,
+  injections: Injections,
 ): Promise<unknown[]> {
   let raw = params;
   if (raw === undefined || raw === null) raw = [];

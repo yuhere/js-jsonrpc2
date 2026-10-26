@@ -3,7 +3,13 @@ import { RPCError } from '../errors/RPCError';
 import { METHOD_NOT_FOUND } from '../errors/codes';
 import { assertAccessible } from './permission';
 import type { Repository } from './Repository';
-import { InjectableMarker } from "../schema/json";
+import { InjectableMarker } from '../schema/json';
+import { RPCVersion } from '../schema/z/protocol';
+import type {
+    RPCFailure, RPCSuccess,
+    RPCStreamSuccess,
+    LlmToolCall, LlmTools, Injections
+} from '../types';
 
 export interface JSONSchema {
     type?: string | string[];
@@ -26,7 +32,7 @@ export interface JSONSchema {
     nullable?: boolean;
 }
 
-export function schemaToJSONSchema(schema: Schema<unknown>): JSONSchema {
+function schemaToJSONSchema(schema: Schema<unknown>): JSONSchema {
     return convert(schema.toJSON());
 }
 
@@ -130,28 +136,17 @@ function convert(desc: SchemaDescription): JSONSchema {
     return out;
 }
 
-type Tools = Array<{
-    type: 'function';
-    function: { name: string; description: string; parameters: Record<string, unknown> };
-}>;
-
-export async function generateLlmTools(
+export async function listLlmTools(
     repository: Repository,
-    permCheck: unknown,
-    rawOptions: unknown,
-): Promise<Tools> {
+    injections: Injections,
+    rawOptions?: unknown,
+): Promise<LlmTools> {
     const opts = (rawOptions ?? {}) as {
         includeStreaming?: boolean;
-        namePrefix?: string;
         prefix?: string;
     };
-    const { includeStreaming = false, namePrefix = '', prefix } = opts;
-
-    const tools: Array<{
-        type: 'function';
-        function: { name: string; description: string; parameters: Record<string, unknown> };
-    }> = [];
-
+    const { includeStreaming = false, prefix } = opts;
+    const tools: LlmTools = [];
     for (const name of repository.list()) {
         if (prefix && !name.startsWith(prefix)) continue;
         const descriptor = repository.get(name);
@@ -159,7 +154,7 @@ export async function generateLlmTools(
 
         // 权限过滤：不可见的方法直接跳过（与 listMethods 语义一致）
         try {
-            await assertAccessible(descriptor, permCheck);
+            await assertAccessible(descriptor, injections);
         } catch (error) {
             if (error instanceof RPCError && error.code === METHOD_NOT_FOUND) continue;
             throw error;
@@ -197,7 +192,7 @@ export async function generateLlmTools(
         tools.push({
             type: 'function',
             function: {
-                name: `${namePrefix}${name}`,
+                name: `${name.replaceAll(/\./g, '_')}`,
                 description: parts.join('\n\n') || name,
                 parameters: {
                     type: 'object',
@@ -210,4 +205,49 @@ export async function generateLlmTools(
     }
 
     return tools;
+}
+
+export async function invokeLlmTool(repository: Repository, call: LlmToolCall, injections: Injections): Promise<unknown> {
+    const { name, arguments: args } = call;
+    const args_len = Object.keys(args).length;
+    const params: unknown[] = [];
+    for (let i = 0; i < args_len; i++) {
+        const key = `param${i}`;
+        if (!(key in args)) throw new Error(`Missing tool argument: ${key}`);
+        params.push(args[key]);
+    }
+    //
+    const rpc_result = await repository.invoke(
+        { jsonrpc: RPCVersion, method: name.replaceAll(/_/g, "."), params, id: `llm-${Date.now()}` },
+        { injections }
+    );
+
+    const rpc_failure = rpc_result as unknown as RPCFailure;
+    if ("error" in rpc_failure) {
+        throw new Error(rpc_failure.error.code + ": " + rpc_failure.error.message);
+    }
+
+    const rpc_success = rpc_result as unknown as RPCSuccess;
+    if ("result" in rpc_success) {
+        return rpc_success.result;
+    }
+    // ############
+    const rpc_stream_success = rpc_result as unknown as RPCStreamSuccess;
+    if ("chunks" in rpc_stream_success) {
+        return (async function* () {
+            for await (const chunk of rpc_stream_success.chunks) {
+                if ("error" in chunk) {
+                    throw new Error(chunk.error.code + ": " + chunk.error.message);
+                }
+                const unpacked_chunk: Record<string, unknown> = {};
+                if ("index" in chunk) {
+                    unpacked_chunk.index = chunk.index;
+                }
+                if ("value" in chunk) {
+                    unpacked_chunk.value = chunk.value;
+                }
+                yield unpacked_chunk;
+            }
+        })();
+    }
 }

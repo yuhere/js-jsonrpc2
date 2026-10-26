@@ -63,10 +63,10 @@ export type RPCResponse = RPCSuccess | RPCStreamSuccess | RPCFailure;
 
 // ########################################
 
-export type Injectables = Record<string, unknown | (() => unknown | Promise<unknown>)>;
+export type Injections = Record<string, unknown | (() => unknown | Promise<unknown>)>;
 
 export interface InjectableFactory {
-  (req: unknown, res: unknown, repository: Repository): Injectables;
+  (options: Record<string, unknown>, repository: Repository): Injections;
 }
 
 export interface RPCRequestInput {
@@ -77,7 +77,7 @@ export interface RPCRequestInput {
 }
 
 export interface InvokeOptions {
-  injections?: Injectables;
+  injections?: Injections;
   errorTransform?: RPCErrorTransform | undefined;
 }
 
@@ -86,3 +86,18 @@ export interface RepositoryOptions {
 }
 
 export type RPCErrorTransform = (error: unknown) => RPCError | undefined;
+
+// ##############
+export interface LlmToolCall {
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export type LlmTools = Array<{
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>
+  };
+}>;

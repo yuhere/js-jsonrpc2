@@ -90,9 +90,9 @@ async function main(): Promise<void> {
     const server = createServer(app);
     attachWebSocket(server, repository, {
         path: '/',
-        mkInjectable: (ws, req, repo) => ({
-            socket: ws,
-            request: req,
+        mkInjectable: ({ socket, request }, repo) => ({
+            socket,
+            request,
             repository: repo,
             requestId: `ws-${Math.random().toString(36).slice(2, 8)}`,
         }),

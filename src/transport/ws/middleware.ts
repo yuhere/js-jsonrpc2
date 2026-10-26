@@ -7,7 +7,7 @@ import { INTERNAL_ERROR, PARSE_ERROR } from '../../errors/codes';
 import { stringify } from "../../stream/stringify-stream";
 import type {
     InjectableFactory,
-    Injectables,
+    Injections,
     RPCErrorTransform,
     RPCResponse,
     RPCStreamChunk,
@@ -33,7 +33,7 @@ export interface WSOptions {
 interface WsContext {
     repository: Repository;
     options: WSOptions;
-    injectables: Injectables;
+    injectables: Injections;
     closed: boolean;
 }
 
@@ -282,13 +282,16 @@ function buildInjectables(
     ws: WebSocket,
     req: IncomingMessage,
     repository: Repository,
-): Injectables {
-    if (typeof factory === 'function') {
-        return factory(ws, req, repository);
-    }
-    return {
-        socket: ws,
-        request: req,
-        repository,
-    };
+): Injections {
+    const injections = typeof factory === 'function'
+        ? factory({
+            socket: ws,
+            request: req,
+        }, repository)
+        : {
+            socket: ws,
+            request: req,
+            repository,
+        }
+    return { ...injections, injections: injections };
 }

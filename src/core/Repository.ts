@@ -6,8 +6,9 @@ import { convertParams } from './convert';
 import { checkPermission } from './permission';
 import { validateRequest } from './spec-check';
 import { registerSystemMethods } from './system-methods';
+import { listLlmTools, invokeLlmTool } from './llm-tools';
 import { registerSchema } from '../schema/z/register';
-import { RPCVersion } from "../schema/z/protocol";
+import { RPCVersion } from '../schema/z/protocol';
 import type { z } from 'zod';
 import type {
   RPCDescriptor,
@@ -18,7 +19,8 @@ import type {
   RPCStreamChunk,
   RPCStreamSuccess,
   InvokeOptions,
-  RepositoryOptions
+  RepositoryOptions,
+  LlmToolCall, LlmTools, Injections
 } from '../types';
 
 function formatRegisterIssues(error: z.ZodError): string {
@@ -112,6 +114,14 @@ export class Repository {
       }
       return this.failure(null, new RPCError(INTERNAL_ERROR, 'Internal error', message));
     }
+  }
+
+  async invokeLlmTool(call: LlmToolCall, injections: Injections): Promise<unknown> {
+    return invokeLlmTool(this, call, injections);
+  }
+
+  async listLlmTools(injections: Injections, rawOptions?: unknown): Promise<LlmTools> {
+    return listLlmTools(this, injections, rawOptions);
   }
 
   /**

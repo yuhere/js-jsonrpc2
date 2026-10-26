@@ -6,7 +6,7 @@ import typeIs from 'type-is';
 import { Repository } from '../../core/Repository';
 import { RPCError } from '../../errors/RPCError';
 import { INTERNAL_ERROR } from '../../errors/codes';
-import type { InjectableFactory, Injectables, RPCResponse, RPCErrorTransform } from '../../types';
+import type { InjectableFactory, Injections, RPCResponse, RPCErrorTransform } from '../../types';
 import { createJsonParser, readJson } from './body';
 import { respond } from './respond';
 import { RPCVersion } from "../../schema/z/protocol";
@@ -63,16 +63,21 @@ function buildInjectables(
   req: Request,
   res: Response,
   repository: Repository,
-): Injectables {
-  if (typeof factory === 'function') {
-    return factory(req, res, repository);
-  }
-  return {
-    request: req,
-    session: (req as Request & { session?: unknown }).session,
-    response: res,
-    repository,
-  };
+): Injections {
+
+  const injections = typeof factory === 'function'
+    ? factory({
+      request: req,
+      session: (req as Request & { session?: unknown }).session,
+      response: res
+    }, repository)
+    : {
+      request: req,
+      session: (req as Request & { session?: unknown }).session,
+      response: res,
+      repository,
+    }
+  return { ...injections, injections: injections };
 }
 
 async function handleError(

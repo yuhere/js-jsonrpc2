@@ -62,9 +62,9 @@ describe('express integration', () => {
         app.use(
             '/',
             createExpressRouter(repository, {
-                mkInjectable: (req) => ({
-                    request: req,
-                    perm_check: async () => Boolean((req as express.Request).headers['grant']),
+                mkInjectable: ({ request }) => ({
+                    request,
+                    perm_check: async () => Boolean((request as express.Request).headers['grant']),
                 }),
             }),
         );
