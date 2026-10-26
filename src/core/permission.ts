@@ -1,8 +1,7 @@
 import { RPCError } from '../errors/RPCError';
-import { PERMISSION_DENIED } from '../errors/codes';
+import { METHOD_NOT_FOUND, PERMISSION_DENIED } from '../errors/codes';
 import type { MethodDescriptor } from './descriptor';
 import type { Injectables } from '../types';
-
 
 export async function checkPermission(descriptor: MethodDescriptor, injections: Injectables): Promise<void> {
   const grantTo = descriptor.grantTo;
@@ -24,4 +23,15 @@ export async function checkPermission(descriptor: MethodDescriptor, injections: 
   }
 
   throw new RPCError(PERMISSION_DENIED, 'Permission denied', `one of ${JSON.stringify(grantTo)} is necessary for [${descriptor.namespace}].`);
+}
+
+export async function assertAccessible(descriptor: MethodDescriptor, permCheck: unknown): Promise<void> {
+  try {
+    await checkPermission(descriptor, { perm_check: permCheck });
+  } catch (error) {
+    if (error instanceof RPCError && error.code === PERMISSION_DENIED) {
+      throw new RPCError(METHOD_NOT_FOUND, 'Method not found', `Method not found.[${descriptor.namespace}]`);
+    }
+    throw error;
+  }
 }

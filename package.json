@@ -1,6 +1,6 @@
 {
   "name": "@yuhere/js-jsonrpc2",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "description": "A TypeScript JSON-RPC 2.0 server library with schema validation, authorization, dependency injection, and multiple transports.",
   "homepage": "https://github.com/yuhere/js-jsonrpc2#readme",
   "license": "MIT",
@@ -40,7 +40,7 @@
     "js-jsonrpc2": "./dist/cli.js"
   },
   "scripts": {
-    "build": "clean && npm run build:lib && npm run build:webui",
+    "build": "npm run clean && npm run build:lib && npm run build:webui",
     "build:lib": "tsc -p tsconfig.build.json && tsc-esm-fix",
     "build:webui": "tsc -p webui//tsconfig.json && vite build --config webui/vite.config.ts",
     "dev": "run-p dev:lib dev:webui",

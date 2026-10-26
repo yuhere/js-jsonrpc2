@@ -1,24 +1,12 @@
-// src/core/system-methods.ts
 import { RPCError } from '../errors/RPCError';
-import { METHOD_NOT_FOUND, PERMISSION_DENIED } from '../errors/codes';
-import { checkPermission } from './permission';
+import { METHOD_NOT_FOUND } from '../errors/codes';
+import { assertAccessible } from './permission';
 import { s } from '../schema/json';
 import type { Repository } from './Repository';
-import type { MethodDescriptor } from './descriptor';
+import { generateLlmTools } from "./llm-tools";
 
 function notFound(namespace: string): RPCError {
   return new RPCError(METHOD_NOT_FOUND, 'Method not found', `Method not found.[${namespace}]`);
-}
-
-async function assertAccessible(descriptor: MethodDescriptor, permCheck: unknown): Promise<void> {
-  try {
-    await checkPermission(descriptor, { perm_check: permCheck });
-  } catch (error) {
-    if (error instanceof RPCError && error.code === PERMISSION_DENIED) {
-      throw notFound(descriptor.namespace);
-    }
-    throw error;
-  }
 }
 
 export function registerSystemMethods(repository: Repository): void {
@@ -84,4 +72,38 @@ export function registerSystemMethods(repository: Repository): void {
       return document === undefined ? null : document;
     },
   );
+
+  repository.register(
+    {
+      namespace: 'llm.tools',
+      document:
+        'Generate OpenAI-style tool/function definitions for all methods the caller can invoke.\n\n' +
+        'Each entry is `{ type: "function", function: { name, description, parameters } }`.\n' +
+        'Injectable parameters are omitted (they are provided by the server).\n' +
+        'Streaming methods are excluded by default; pass `{ includeStreaming: true }` to include them\n' +
+        '(their description will note that they return a stream).\n\n' +
+        'Optional params: `{ includeStreaming?: boolean, namePrefix?: string, prefix?: string }`.',
+      signature: [
+        s.array(
+          s.object({
+            type: s.literal('function'),
+            function: s.object({
+              name: s.string(),
+              description: s.string(),
+              parameters: s.record(s.unknown()),
+            }),
+          }),
+        ),
+        s.injectable("repository"),
+        s.injectable('perm_check'),
+        s.object({
+          includeStreaming: s.boolean().describe('Include stream-returning methods (default false)'),
+          namePrefix: s.string().describe('Prefix added to every tool name'),
+          prefix: s.string().describe('Only include methods whose namespace starts with this'),
+        }).describe('Options').nullable()
+      ],
+    },
+    generateLlmTools,
+  );
+
 }
