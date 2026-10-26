@@ -1,6 +1,6 @@
 {
   "name": "@yuhere/js-jsonrpc2",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "A TypeScript JSON-RPC 2.0 server library with schema validation, authorization, dependency injection, and multiple transports.",
   "homepage": "https://github.com/yuhere/js-jsonrpc2#readme",
   "license": "MIT",
