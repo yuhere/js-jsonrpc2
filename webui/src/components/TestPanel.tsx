@@ -20,6 +20,12 @@ const COPY_OPTIONS: { value: CopyKind; label: string }[] = [
     { value: 'fetch', label: '复制 fetch' },
 ];
 
+/** 格式化耗时：<1s 用 ms，否则用 s */
+function formatElapsed(ms: number): string {
+    if (ms < 1000) return `${ms.toFixed(0)} ms`;
+    return `${(ms / 1000).toFixed(2)} s`;
+}
+
 export function TestPanel({
     method,
     detail,
@@ -32,6 +38,7 @@ export function TestPanel({
 
     const [values, setValues] = useState<unknown[]>([]);
     const [output, setOutput] = useState('');
+    const [elapsed, setElapsed] = useState<{ total: number; firstFrame?: number } | null>(null);
     const [running, setRunning] = useState(false);
     const [copyKind, setCopyKind] = useState<CopyKind>('curl');
     const [copied, setCopied] = useState(false);
@@ -44,6 +51,7 @@ export function TestPanel({
         if (!method) return;
         setValues(paramSchemas.map(sampleFromSchema));
         setOutput('');
+        setElapsed(null);
     }, [method, paramSchemas]);
 
     useEffect(() => {
@@ -76,29 +84,46 @@ export function TestPanel({
         if (!method) return;
         setRunning(true);
         setOutput('');
+        setElapsed(null);
+
+        const startedAt = performance.now();
         try {
             const result = await rpc.call(method, ...values);
+
+            // 首帧/响应到达耗时
+            const firstFrameAt = performance.now() - startedAt;
+
             if (isStreamResult(result)) {
                 let idx = 0;
                 const lines: string[] = [];
+
+                // 每帧记录到达时间
                 for await (const value of result) {
-                    lines.push(`[${idx}] ${JSON.stringify(value, null, 2)}`);
+                    const now = performance.now() - startedAt;
+                    lines.push(
+                        `[${idx}] (+${formatElapsed(now)}) ${JSON.stringify(value, null, 2)}`,
+                    );
                     idx++;
                     setOutput(lines.join('\n'));
                 }
-                if (idx === 0) setOutput('（流已结束，无数据）');
-                else lines.push(`（流已结束，共 ${idx} 帧）`), setOutput(lines.join('\n'));
-            } else {
-                setOutput(JSON.stringify(result, null, 2));
-            }
 
-            if (isStreamReturn) {
+                const totalAt = performance.now() - startedAt;
+                if (idx === 0) {
+                    lines.push(`（流已结束，无数据，总耗时 ${formatElapsed(totalAt)}）`);
+                } else {
+                    lines.push(`（流已结束，共 ${idx} 帧，总耗时 ${formatElapsed(totalAt)}）`);
+                }
+                setOutput(lines.join('\n'));
+                setElapsed({ total: totalAt, firstFrame: firstFrameAt });
             } else {
-                const result = await rpc.call(method, ...values);
+                const totalAt = performance.now() - startedAt;
                 setOutput(JSON.stringify(result, null, 2));
+                setElapsed({ total: totalAt });
             }
         } catch (e) {
+            const totalAt = performance.now() - startedAt;
             setOutput(formatError(e));
+            setElapsed({ total: totalAt });
         } finally {
             setRunning(false);
             requestAnimationFrame(() =>
@@ -211,12 +236,30 @@ export function TestPanel({
                 >
                     重置为示例
                 </button>
-                <button onClick={() => setOutput('')} disabled={!output}>
+                <button
+                    onClick={() => {
+                        setOutput('');
+                        setElapsed(null);
+                    }}
+                    disabled={!output && !elapsed}
+                >
                     清空输出
                 </button>
             </div>
 
-            <h3>结果{isStreamReturn && <span className="hint">（流式）</span>}</h3>
+            <h3>
+                结果{isStreamReturn && <span className="hint">（流式）</span>}
+                {elapsed && (
+                    <span className="elapsed-badge">
+                        {' '}⏱ {formatElapsed(elapsed.total)}
+                        {elapsed.firstFrame !== undefined && (
+                            <span className="hint">
+                                {' '}· 首帧 {formatElapsed(elapsed.firstFrame)}
+                            </span>
+                        )}
+                    </span>
+                )}
+            </h3>
             <pre className="output" ref={outRef}>
                 {output || '（尚未执行）'}
             </pre>

@@ -9011,11 +9011,17 @@ var COPY_OPTIONS = [{
 	value: "fetch",
 	label: "复制 fetch"
 }];
+/** 格式化耗时：<1s 用 ms，否则用 s */
+function formatElapsed(ms) {
+	if (ms < 1e3) return `${ms.toFixed(0)} ms`;
+	return `${(ms / 1e3).toFixed(2)} s`;
+}
 function TestPanel({ method, detail, rpc, transport, endpoint }) {
 	const paramSchemas = (0, import_react.useMemo)(() => detail.signature.slice(1), [detail.signature]);
 	const isStreamReturn = detail.signature[0]?.kind === "stream";
 	const [values, setValues] = (0, import_react.useState)([]);
 	const [output, setOutput] = (0, import_react.useState)("");
+	const [elapsed, setElapsed] = (0, import_react.useState)(null);
 	const [running, setRunning] = (0, import_react.useState)(false);
 	const [copyKind, setCopyKind] = (0, import_react.useState)("curl");
 	const [copied, setCopied] = (0, import_react.useState)(false);
@@ -9027,6 +9033,7 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 		if (!method) return;
 		setValues(paramSchemas.map(sampleFromSchema));
 		setOutput("");
+		setElapsed(null);
 	}, [method, paramSchemas]);
 	(0, import_react.useEffect)(() => {
 		setCopied(false);
@@ -9052,25 +9059,37 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 		if (!method) return;
 		setRunning(true);
 		setOutput("");
+		setElapsed(null);
+		const startedAt = performance.now();
 		try {
 			const result = await rpc.call(method, ...values);
+			const firstFrameAt = performance.now() - startedAt;
 			if (isStreamResult(result)) {
 				let idx = 0;
 				const lines = [];
 				for await (const value of result) {
-					lines.push(`[${idx}] ${JSON.stringify(value, null, 2)}`);
+					const now = performance.now() - startedAt;
+					lines.push(`[${idx}] (+${formatElapsed(now)}) ${JSON.stringify(value, null, 2)}`);
 					idx++;
 					setOutput(lines.join("\n"));
 				}
-				if (idx === 0) setOutput("（流已结束，无数据）");
-				else lines.push(`（流已结束，共 ${idx} 帧）`), setOutput(lines.join("\n"));
-			} else setOutput(JSON.stringify(result, null, 2));
-			if (isStreamReturn) {} else {
-				const result = await rpc.call(method, ...values);
+				const totalAt = performance.now() - startedAt;
+				if (idx === 0) lines.push(`（流已结束，无数据，总耗时 ${formatElapsed(totalAt)}）`);
+				else lines.push(`（流已结束，共 ${idx} 帧，总耗时 ${formatElapsed(totalAt)}）`);
+				setOutput(lines.join("\n"));
+				setElapsed({
+					total: totalAt,
+					firstFrame: firstFrameAt
+				});
+			} else {
+				const totalAt = performance.now() - startedAt;
 				setOutput(JSON.stringify(result, null, 2));
+				setElapsed({ total: totalAt });
 			}
 		} catch (e) {
+			const totalAt = performance.now() - startedAt;
 			setOutput(formatError(e));
+			setElapsed({ total: totalAt });
 		} finally {
 			setRunning(false);
 			requestAnimationFrame(() => outRef.current?.scrollIntoView({ block: "nearest" }));
@@ -9182,16 +9201,38 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 						children: "重置为示例"
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						onClick: () => setOutput(""),
-						disabled: !output,
+						onClick: () => {
+							setOutput("");
+							setElapsed(null);
+						},
+						disabled: !output && !elapsed,
 						children: "清空输出"
 					})
 				]
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: ["结果", isStreamReturn && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-				className: "hint",
-				children: "（流式）"
-			})] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: [
+				"结果",
+				isStreamReturn && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "hint",
+					children: "（流式）"
+				}),
+				elapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "elapsed-badge",
+					children: [
+						" ",
+						"⏱ ",
+						formatElapsed(elapsed.total),
+						elapsed.firstFrame !== void 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							className: "hint",
+							children: [
+								" ",
+								"· 首帧 ",
+								formatElapsed(elapsed.firstFrame)
+							]
+						})
+					]
+				})
+			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
 				className: "output",
 				ref: outRef,
@@ -9433,4 +9474,4 @@ function App() {
 import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }));
 //#endregion
 
-//# sourceMappingURL=index-BEVUmX2-.js.map
+//# sourceMappingURL=index-sVQlhxjI.js.map

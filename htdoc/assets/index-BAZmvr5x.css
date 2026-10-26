@@ -727,3 +727,16 @@ textarea:focus {
         display: inline-flex;
     }
 }
+
+/* ---- 耗时徽章（TestPanel 结果区） ---- */
+.elapsed-badge {
+    color: var(--syn-number);
+    font-size: 12px;
+    font-weight: normal;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.elapsed-badge .hint {
+    font-size: 11px;
+}
