@@ -14,9 +14,9 @@ export function registerSystemMethods(repository: Repository): void {
     {
       namespace: 'system.listMethods',
       document: 'This method returns an array of strings, one for each method supported by the RPC server.',
-      signature: [s.array(s.string()), s.injectable('injections')],
+      signature: [s.array(s.string()), s.injectable('repository'), s.injectable('injections')],
     },
-    async function systemListMethods(injections: Injections) {
+    async function systemListMethods(repository: Repository, injections: Injections) {
       const visible: string[] = [];
       for (const name of repository.list()) {
         const descriptor = repository.get(name);
@@ -41,9 +41,9 @@ export function registerSystemMethods(repository: Repository): void {
         'It returns an array of possible signatures for this method.\n' +
         'A signature is an array of types.\n' +
         'The first of these types is the return type of the method, the rest are parameters.\n',
-      signature: [s.array(s.unknown()), s.string(), s.injectable('injections')],
+      signature: [s.array(s.unknown()), s.string(), s.injectable('repository'), s.injectable('injections')],
     },
-    async function systemMethodSignature(namespace: string, injections: Injections) {
+    async function systemMethodSignature(namespace: string, repository: Repository, injections: Injections) {
       const descriptor = repository.get(namespace);
       if (!descriptor) throw notFound(namespace);
       await assertAccessible(descriptor, injections);
@@ -59,9 +59,9 @@ export function registerSystemMethods(repository: Repository): void {
         'It returns a documentation string describing the use of that method.\n' +
         'If no such string is available, an empty string is returned.\n' +
         'The documentation string may contain HTML markup.\n',
-      signature: [s.string(), s.string(), s.injectable('injections')],
+      signature: [s.string(), s.string(), s.injectable('repository'), s.injectable('injections')],
     },
-    async function systemMethodHelp(namespace: string, injections: Injections) {
+    async function systemMethodHelp(namespace: string, repository: Repository, injections: Injections) {
       const descriptor = repository.get(namespace);
       if (!descriptor) throw notFound(namespace);
       await assertAccessible(descriptor, injections);
@@ -70,6 +70,27 @@ export function registerSystemMethods(repository: Repository): void {
         return (await document(descriptor as never)) ?? null;
       }
       return document === undefined ? null : document;
+    },
+  );
+
+  repository.register(
+    {
+      namespace: 'system.metrics',
+      document:
+        'This method takes one parameter, the name of a method implemented by the RPC server.\n\n' +
+        'It returns a documentation string describing the use of that method.\n' +
+        'If no such string is available, an empty string is returned.\n' +
+        'The documentation string may contain HTML markup.\n',
+      signature: [s.unknown(), s.injectable('repository')],
+    },
+    async function systemMetrics(repository: Repository) {
+      function hasSnapshot(m: unknown): m is { snapshot(): unknown } {
+        return !!m && typeof (m as { snapshot?: unknown }).snapshot === 'function';
+      }
+      const metrics = repository.getMetrics()
+      if (hasSnapshot(metrics)) {
+        return metrics.snapshot();
+      }
     },
   );
 

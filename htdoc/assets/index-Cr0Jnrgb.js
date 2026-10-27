@@ -8013,6 +8013,133 @@ function useMethodDetail(rpc, method) {
 	return detail;
 }
 //#endregion
+//#region webui/src/api/metrics.ts
+/** 拉取 system.metrics；如果系统方法不可用（withSystemMethods=false），返回 undefined。 */
+async function fetchMetrics(rpc) {
+	try {
+		const raw = await rpc.call("system.metrics");
+		if (!raw || typeof raw !== "object" || typeof raw.methods !== "object") return void 0;
+		return raw;
+	} catch {
+		return;
+	}
+}
+/** 在给定直方图上估算某个分位数（线性插值）。 */
+function quantileFromHistogram(h, q) {
+	if (h.count === 0) return 0;
+	const target = q * h.count;
+	let prevLe = 0;
+	let prevCount = 0;
+	for (const b of h.buckets) {
+		if (b.le === Number.POSITIVE_INFINITY) {
+			const lo = prevLe;
+			const hi = h.max;
+			const span = b.count - prevCount || 1;
+			const ratio = (target - prevCount) / span;
+			return lo + (hi - lo) * ratio;
+		}
+		if (b.count >= target) {
+			const lo = prevLe;
+			const hi = b.le;
+			const span = b.count - prevCount || 1;
+			const ratio = (target - prevCount) / span;
+			return lo + (hi - lo) * ratio;
+		}
+		prevLe = b.le;
+		prevCount = b.count;
+	}
+	return h.max;
+}
+function deriveMethod(method, stats, prev, dtSeconds) {
+	const totalErrors = Object.values(stats.errorsByCode).reduce((a, b) => a + b, 0);
+	const opened = stats.streams.opened || 0;
+	const errorRate = stats.calls > 0 ? totalErrors / stats.calls : 0;
+	const callsPerSecond = prev && dtSeconds && dtSeconds > 0 ? Math.max(0, (stats.calls - prev.calls) / dtSeconds) : void 0;
+	return {
+		method,
+		stats,
+		...callsPerSecond !== void 0 ? { callsPerSecond } : {},
+		errorRate,
+		p50: quantileFromHistogram(stats.duration, .5),
+		p95: quantileFromHistogram(stats.duration, .95),
+		p99: quantileFromHistogram(stats.duration, .99),
+		streamCompletionRate: opened > 0 ? stats.streams.completed / opened : 0,
+		streamAbortRate: opened > 0 ? stats.streams.aborted / opened : 0,
+		ttfbP50: quantileFromHistogram(stats.streamTimeToFirstChunk, .5),
+		ttfbP95: quantileFromHistogram(stats.streamTimeToFirstChunk, .95),
+		avgChunksPerStream: opened > 0 ? stats.streamChunksTotal / (stats.streams.completed + stats.streams.failed + stats.streams.aborted || 1) : 0
+	};
+}
+//#endregion
+//#region webui/src/hooks/useMetrics.ts
+function useMetrics(rpc, enabled) {
+	const [snapshot, setSnapshot] = (0, import_react.useState)(void 0);
+	const [previous, setPrevious] = (0, import_react.useState)(void 0);
+	const [fetchedAt, setFetchedAt] = (0, import_react.useState)(void 0);
+	const [loading, setLoading] = (0, import_react.useState)(false);
+	const [error, setError] = (0, import_react.useState)(null);
+	const [available, setAvailable] = (0, import_react.useState)(true);
+	const [autoRefresh, setAutoRefresh] = (0, import_react.useState)(true);
+	const [intervalMs, setIntervalMs] = (0, import_react.useState)(3e3);
+	const inFlight = (0, import_react.useRef)(false);
+	const refresh = (0, import_react.useCallback)(async () => {
+		if (inFlight.current) return;
+		inFlight.current = true;
+		setLoading(true);
+		setError(null);
+		try {
+			const next = await fetchMetrics(rpc);
+			if (!next) {
+				setAvailable(false);
+				return;
+			}
+			setAvailable(true);
+			const now = Date.now();
+			setSnapshot((curr) => {
+				if (curr) setPrevious({
+					snapshot: curr,
+					fetchedAt: fetchedAt ?? now
+				});
+				return next;
+			});
+			setFetchedAt(now);
+		} catch (e) {
+			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setLoading(false);
+			inFlight.current = false;
+		}
+	}, [rpc, fetchedAt]);
+	(0, import_react.useEffect)(() => {
+		if (!enabled) return;
+		refresh();
+	}, [enabled, rpc]);
+	(0, import_react.useEffect)(() => {
+		if (!enabled || !autoRefresh || !available) return;
+		const t = setInterval(() => void refresh(), intervalMs);
+		return () => clearInterval(t);
+	}, [
+		enabled,
+		autoRefresh,
+		available,
+		intervalMs,
+		refresh
+	]);
+	return {
+		snapshot,
+		previous,
+		fetchedAt,
+		loading,
+		error,
+		refresh,
+		autoRefresh,
+		setAutoRefresh,
+		intervalMs,
+		setIntervalMs,
+		available
+	};
+}
+//#endregion
 //#region node_modules/react/cjs/react-jsx-runtime.production.min.js
 /**
 * @license React
@@ -8026,6 +8153,7 @@ function useMethodDetail(rpc, method) {
 var require_react_jsx_runtime_production_min = /* @__PURE__ */ __commonJSMin(((exports) => {
 	var f = require_react();
 	var k = Symbol.for("react.element");
+	var l = Symbol.for("react.fragment");
 	var m = Object.prototype.hasOwnProperty;
 	var n = f.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED.ReactCurrentOwner;
 	var p = {
@@ -8050,6 +8178,7 @@ var require_react_jsx_runtime_production_min = /* @__PURE__ */ __commonJSMin(((e
 			_owner: n.current
 		};
 	}
+	exports.Fragment = l;
 	exports.jsx = q;
 	exports.jsxs = q;
 }));
@@ -9291,6 +9420,449 @@ function formatError(e) {
 	return `Error: ${e instanceof Error ? e.message : String(e)}`;
 }
 //#endregion
+//#region webui/src/components/MetricsPanel.tsx
+function formatDuration(seconds) {
+	if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+	if (seconds < .001) return `${(seconds * 1e6).toFixed(0)} µs`;
+	if (seconds < 1) return `${(seconds * 1e3).toFixed(1)} ms`;
+	if (seconds < 60) return `${seconds.toFixed(2)} s`;
+	return `${(seconds / 60).toFixed(1)} min`;
+}
+function formatRate(v) {
+	if (v === void 0) return "—";
+	if (v >= 100) return v.toFixed(0);
+	if (v >= 10) return v.toFixed(1);
+	return v.toFixed(2);
+}
+function formatPercent(v) {
+	if (!Number.isFinite(v)) return "—";
+	return `${(v * 100).toFixed(1)}%`;
+}
+function rateClass(v) {
+	if (v === void 0) return "";
+	if (v > 100) return "rate-hot";
+	if (v > 10) return "rate-warm";
+	return "rate-cold";
+}
+function MetricsPanel({ snapshot, previous, fetchedAt, loading, error, available, onRefresh, autoRefresh, onAutoRefreshChange, intervalMs, onIntervalChange }) {
+	const derived = (0, import_react.useMemo)(() => {
+		if (!snapshot) return [];
+		const dtSeconds = previous && fetchedAt ? (fetchedAt - previous.fetchedAt) / 1e3 : void 0;
+		const rows = [];
+		for (const [method, stats] of Object.entries(snapshot.methods)) {
+			const prev = previous?.snapshot.methods[method];
+			rows.push(deriveMethod(method, stats, prev, dtSeconds));
+		}
+		rows.sort((a, b) => b.stats.calls - a.stats.calls);
+		return rows;
+	}, [
+		snapshot,
+		previous,
+		fetchedAt
+	]);
+	const streamMethods = derived.filter((r) => r.stats.streams.opened > 0);
+	const nonStreamMethods = derived.filter((r) => r.stats.streams.opened === 0);
+	const totals = (0, import_react.useMemo)(() => {
+		if (!snapshot) return {
+			calls: 0,
+			errors: 0,
+			methods: 0,
+			streams: 0
+		};
+		let calls = 0;
+		let errors = 0;
+		let streams = 0;
+		for (const s of Object.values(snapshot.methods)) {
+			calls += s.calls;
+			errors += Object.values(s.errorsByCode).reduce((a, b) => a + b, 0);
+			streams += s.streams.opened;
+		}
+		return {
+			calls,
+			errors,
+			methods: Object.keys(snapshot.methods).length,
+			streams
+		};
+	}, [snapshot]);
+	if (!available) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: "metrics",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Metrics" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+			className: "hint",
+			children: [
+				"服务端未启用 ",
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "system.metrics" }),
+				"（",
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "withSystemMethods: false" }),
+				" 或未注册）。"
+			]
+		})]
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: "metrics",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "metrics-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Metrics" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "metrics-controls",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+							className: "metrics-auto",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								type: "checkbox",
+								checked: autoRefresh,
+								onChange: (e) => onAutoRefreshChange(e.target.checked)
+							}), "自动刷新"]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+							className: "sf-input",
+							value: intervalMs,
+							onChange: (e) => onIntervalChange(Number(e.target.value)),
+							disabled: !autoRefresh,
+							title: "刷新间隔",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: 1e3,
+									children: "1s"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: 3e3,
+									children: "3s"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: 5e3,
+									children: "5s"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: 1e4,
+									children: "10s"
+								})
+							]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							onClick: onRefresh,
+							disabled: loading,
+							children: loading ? "刷新中…" : "立即刷新"
+						}),
+						snapshot && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+							className: "hint",
+							children: ["uptime ", formatDuration(snapshot.uptimeMs / 1e3)]
+						})
+					]
+				})]
+			}),
+			error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "error",
+				children: error
+			}),
+			!snapshot && !error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "hint",
+				children: "加载中…"
+			}),
+			snapshot && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "metrics-cards",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
+							label: "Methods",
+							value: String(totals.methods)
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
+							label: "Calls",
+							value: String(totals.calls)
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
+							label: "Streams",
+							value: String(totals.streams)
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
+							label: "Errors",
+							value: String(totals.errors),
+							tone: totals.errors > 0 ? "danger" : void 0
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
+							label: "Error rate",
+							value: totals.calls > 0 ? formatPercent(totals.errors / totals.calls) : "—",
+							tone: totals.calls > 0 && totals.errors / totals.calls > .05 ? "danger" : void 0
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
+							label: "Invalid requests",
+							value: String(snapshot.invalidRequests),
+							tone: snapshot.invalidRequests > 0 ? "warn" : void 0
+						})
+					]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: ["Non-stream methods", /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "hint",
+					children: [
+						" （",
+						nonStreamMethods.length,
+						"）"
+					]
+				})] }),
+				nonStreamMethods.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "hint",
+					children: "暂无数据。"
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NonStreamTable, { rows: nonStreamMethods }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: ["Stream methods", /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "hint",
+					children: [
+						" （",
+						streamMethods.length,
+						"）"
+					]
+				})] }),
+				streamMethods.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "hint",
+					children: "暂无流式调用。"
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StreamTable, { rows: streamMethods })
+			] })
+		]
+	});
+}
+function MetricCard({ label, value, tone }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: `metric-card${tone ? ` metric-card-${tone}` : ""}`,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "metric-card-label",
+			children: label
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "metric-card-value",
+			children: value
+		})]
+	});
+}
+function NonStreamTable({ rows }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+		className: "metrics-table",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "method" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "calls"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "rate/s"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "errors"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "err%"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "p50"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "p95"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "p99"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "avg"
+			})
+		] }) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: rows.map((r) => {
+			const errorCount = Object.values(r.stats.errorsByCode).reduce((a, b) => a + b, 0);
+			const avg = r.stats.duration.count > 0 ? r.stats.duration.sum / r.stats.duration.count : 0;
+			return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					className: "method-name",
+					title: r.method,
+					children: r.method
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					className: "num",
+					children: r.stats.calls
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					className: `num ${rateClass(r.callsPerSecond)}`,
+					children: formatRate(r.callsPerSecond)
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					className: `num${errorCount > 0 ? " error" : ""}`,
+					children: errorCount
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					className: `num${r.errorRate > .05 ? " error" : ""}`,
+					children: formatPercent(r.errorRate)
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					className: "num",
+					children: formatDuration(r.p50)
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					className: "num",
+					children: formatDuration(r.p95)
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					className: "num",
+					children: formatDuration(r.p99)
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+					className: "num",
+					children: formatDuration(avg)
+				})
+			] }, r.method);
+		}) })]
+	});
+}
+function StreamTable({ rows }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+		className: "metrics-table",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "method" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "opened"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "completed"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "failed"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "aborted"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "complete%"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "abort%"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "avg chunks"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "ttfb p50"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "ttfb p95"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+				className: "num",
+				children: "duration avg"
+			})
+		] }) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: rows.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "method-name",
+				title: r.method,
+				children: r.method
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "num",
+				children: r.stats.streams.opened
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "num",
+				children: r.stats.streams.completed
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: `num${r.stats.streams.failed > 0 ? " error" : ""}`,
+				children: r.stats.streams.failed
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: `num${r.stats.streams.aborted > 0 ? " warn" : ""}`,
+				children: r.stats.streams.aborted
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "num",
+				children: formatPercent(r.streamCompletionRate)
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "num",
+				children: formatPercent(r.streamAbortRate)
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "num",
+				children: r.avgChunksPerStream.toFixed(1)
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "num",
+				children: formatDuration(r.ttfbP50)
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "num",
+				children: formatDuration(r.ttfbP95)
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+				className: "num",
+				children: formatDuration(r.stats.streamDuration.count > 0 ? r.stats.streamDuration.sum / r.stats.streamDuration.count : 0)
+			})
+		] }, r.method)) })]
+	});
+}
+//#endregion
+//#region webui/src/api/glob.ts
+function globToRegExp(glob) {
+	let re = "^";
+	for (let i = 0; i < glob.length; i++) {
+		const ch = glob[i];
+		if (ch === "*") {
+			while (i + 1 < glob.length && glob[i + 1] === "*") i++;
+			re += ".*";
+		} else if (ch === "?") re += ".";
+		else if ("\\^$+{}()|[]".includes(ch)) re += "\\" + ch;
+		else re += ch;
+	}
+	re += "$";
+	return new RegExp(re);
+}
+function compileGlobFilter(input) {
+	const raw = input ?? "";
+	const trimmed = raw.trim();
+	if (trimmed.length === 0) return {
+		includes: [],
+		excludes: [],
+		raw,
+		passthrough: true
+	};
+	const includes = [];
+	const excludes = [];
+	for (const part of trimmed.split(",")) {
+		const pat = part.trim();
+		if (pat.length === 0) continue;
+		if (pat.startsWith("!")) {
+			const body = pat.slice(1).trim();
+			if (body.length > 0) excludes.push(globToRegExp(body));
+		} else includes.push(globToRegExp(pat));
+	}
+	return {
+		includes,
+		excludes,
+		raw,
+		passthrough: false
+	};
+}
+function matchMethod(filter, method) {
+	if (filter.passthrough) return true;
+	if (filter.excludes.some((re) => re.test(method))) return false;
+	if (filter.includes.length === 0) return true;
+	return filter.includes.some((re) => re.test(method));
+}
+/** 便捷：直接对 MetricsSnapshot 的 methods 做过滤，返回浅拷贝。 */
+function filterSnapshotMethods(filter, methods) {
+	if (filter.passthrough) return methods;
+	const out = {};
+	for (const [method, stats] of Object.entries(methods)) if (matchMethod(filter, method)) out[method] = stats;
+	return out;
+}
+//#endregion
 //#region webui/src/api/docGen.ts
 function isSchema(v) {
 	return !!v && typeof v === "object" && typeof v.kind === "string";
@@ -9427,17 +9999,25 @@ function App() {
 	const [transport, setTransport] = (0, import_react.useState)("http");
 	const [selected, setSelected] = (0, import_react.useState)("");
 	const [generatingDocs, setGeneratingDocs] = (0, import_react.useState)(false);
-	const rpc = (0, import_react.useMemo)(() => {
-		return createRpc({
-			transport,
-			endpoint: ENDPOINT
-		});
-	}, [transport]);
-	(0, import_react.useEffect)(() => {
-		return () => rpc.close();
-	}, [rpc]);
+	const [view, setView] = (0, import_react.useState)("methods");
+	const [methodFilter, setMethodFilter] = (0, import_react.useState)("");
+	const rpc = (0, import_react.useMemo)(() => createRpc({
+		transport,
+		endpoint: ENDPOINT
+	}), [transport]);
+	(0, import_react.useEffect)(() => () => rpc.close(), [rpc]);
 	const { methods, loading, error, refresh } = useMethods(rpc);
 	const detail = useMethodDetail(rpc, selected);
+	const metrics = useMetrics(rpc, view === "metrics");
+	const compiledFilter = (0, import_react.useMemo)(() => compileGlobFilter(methodFilter), [methodFilter]);
+	const filteredSnapshot = (0, import_react.useMemo)(() => {
+		if (!metrics.snapshot) return void 0;
+		if (compiledFilter.passthrough) return metrics.snapshot;
+		return {
+			...metrics.snapshot,
+			methods: filterSnapshotMethods(compiledFilter, metrics.snapshot.methods)
+		};
+	}, [metrics.snapshot, compiledFilter]);
 	const generateDocs = (0, import_react.useCallback)(async () => {
 		if (methods.length === 0) {
 			alert("方法列表为空，请先刷新方法列表。");
@@ -9465,14 +10045,87 @@ function App() {
 			generatingDocs
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
 			className: "sidebar",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Methods" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MethodTree, {
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "view-switch segmented",
+				role: "group",
+				"aria-label": "视图",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					className: view === "methods" ? "active" : "",
+					onClick: () => setView("methods"),
+					children: "Methods"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					className: view === "metrics" ? "active" : "",
+					onClick: () => setView("metrics"),
+					children: "Metrics"
+				})]
+			}), view === "methods" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Methods" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MethodTree, {
 				methods,
 				selected,
 				onSelect: setSelected
+			})] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "metrics-sidebar",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Metrics" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "hint",
+						style: { margin: "0 0 8px" },
+						children: "📊 服务端 RPC 调用统计。"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+						className: "metrics-filter",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "metrics-filter-label",
+							children: "Filter"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+							className: "sf-input",
+							type: "text",
+							placeholder: "user.*, !system.*",
+							value: methodFilter,
+							onChange: (e) => setMethodFilter(e.target.value),
+							spellCheck: false
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "hint metrics-filter-help",
+						children: [
+							"支持 ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "*" }),
+							" / ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "?" }),
+							" / ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "!" }),
+							"，多个模式用 ",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "," }),
+							" 分隔。",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("br", {}),
+							"例：",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "user.*" }),
+							"、",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "*.get" }),
+							"、",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "!system.*" }),
+							"、",
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "user.*,!user.secret" })
+						]
+					}),
+					metrics.snapshot && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "hint metrics-filter-stat",
+						children: [
+							"匹配 ",
+							Object.keys(filteredSnapshot?.methods ?? {}).length,
+							" /",
+							" ",
+							Object.keys(metrics.snapshot.methods).length,
+							" 个方法"
+						]
+					})
+				]
 			})]
-		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 			className: "content",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MethodDetail, {
+			children: view === "methods" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MethodDetail, {
 				method: selected,
 				detail
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TestPanel, {
@@ -9481,7 +10134,19 @@ function App() {
 				rpc,
 				transport,
 				endpoint: ENDPOINT
-			})]
+			})] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricsPanel, {
+				snapshot: filteredSnapshot,
+				previous: metrics.previous,
+				fetchedAt: metrics.fetchedAt,
+				loading: metrics.loading,
+				error: metrics.error,
+				available: metrics.available,
+				onRefresh: () => void metrics.refresh(),
+				autoRefresh: metrics.autoRefresh,
+				onAutoRefreshChange: metrics.setAutoRefresh,
+				intervalMs: metrics.intervalMs,
+				onIntervalChange: metrics.setIntervalMs
+			})
 		})] })]
 	});
 }
@@ -9490,4 +10155,4 @@ function App() {
 import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }));
 //#endregion
 
-//# sourceMappingURL=index-DxIzaDTV.js.map
+//# sourceMappingURL=index-Cr0Jnrgb.js.map

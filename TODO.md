@@ -4,9 +4,3 @@
 
 #####
 
-1. RPC 远程方法调用的统计功能。
-
-2. creatExpress 中设置是否启用 websocket。
-
-3. bin/jsonrpc2-dome 现在还不好使。
-

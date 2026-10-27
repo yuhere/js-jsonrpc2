@@ -106,4 +106,4 @@ async function handleError(
   });
 }
 
-export type { RPCResponse as RpcResponse };
+export type { RPCResponse };

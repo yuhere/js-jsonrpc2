@@ -83,6 +83,7 @@ export interface InvokeOptions {
 
 export interface RepositoryOptions {
   withSystemMethods?: boolean;
+    metrics?: RPCMetrics;
 }
 
 export type RPCErrorTransform = (error: unknown) => RPCError | undefined;
@@ -101,3 +102,27 @@ export type LlmTools = Array<{
     parameters: Record<string, unknown>
   };
 }>;
+
+/**
+ * RPC 层调用统计钩子。在 Repository 构造时传入。
+ *
+ * 钩子在 Repository.invoke 内部触发，transport 无感。
+ * 抛出的任何异常都会被捕获并忽略，不影响 RPC 语义。
+ */
+export interface RPCMetrics {
+    onCallStart(info: { method: string }): void;
+    onCallEnd(info: {
+        method: string;
+        status: 'success' | 'error' | 'stream_opened' | 'stream_error';
+        code?: number;
+        durationSeconds: number;
+    }): void;
+    onStreamEvent?(info: {
+        method: string;
+        event: 'opened' | 'completed' | 'failed' | 'aborted';
+        phase?: 'before_first_chunk' | 'mid_stream';
+        chunks: number;
+        durationSeconds: number;
+        timeToFirstChunkSeconds?: number;
+    }): void;
+}

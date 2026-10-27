@@ -80,6 +80,12 @@ function listen(
     });
 }
 
+function shouldOpenBrowser(): boolean {
+    if (process.env['NO_OPEN'] === '1') return false;
+    if (process.argv.includes('--no-open')) return false;
+    return true;
+}
+
 async function main(): Promise<void> {
     const repository = createRepository({ withSystemMethods: true });
     installDemoMethods(repository);
@@ -120,7 +126,8 @@ async function main(): Promise<void> {
     console.log('  按 Ctrl+C 停止。');
     console.log('');
 
-    if (hasWebUI && process.env['NO_OPEN'] !== '1') {
+    // 只有 WebUI 存在且没有被显式禁用时才打开。
+    if (hasWebUI && shouldOpenBrowser()) {
         openBrowser(url);
     }
 

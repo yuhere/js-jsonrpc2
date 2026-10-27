@@ -760,3 +760,204 @@ textarea:focus {
 .elapsed-badge .hint {
     font-size: 11px;
 }
+
+
+
+/* ================================================================
+ * Metrics 面板
+ * ================================================================ */
+.metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.metrics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.metrics-header h2 {
+    margin: 0;
+    color: var(--accent);
+    font-size: 16px;
+}
+
+.metrics-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.metrics-auto {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--fg-dim);
+    cursor: pointer;
+    user-select: none;
+}
+
+.metrics-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+}
+
+.metric-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.metric-card-label {
+    font-size: 11px;
+    color: var(--fg-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.metric-card-value {
+    font-size: 22px;
+    font-weight: bold;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+}
+
+.metric-card-danger .metric-card-value {
+    color: var(--danger);
+}
+
+.metric-card-warn .metric-card-value {
+    color: var(--syn-number);
+}
+
+.metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.metrics-table th,
+.metrics-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.metrics-table th {
+    color: var(--fg-dim);
+    font-weight: normal;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    font-size: 11px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 1;
+}
+
+.metrics-table td.num,
+.metrics-table th.num {
+    text-align: right;
+}
+
+.metrics-table tr:hover td {
+    background: var(--hover-bg);
+}
+
+.metrics-table .method-name {
+    color: var(--accent);
+    font-family: var(--mono);
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.metrics-table .error {
+    color: var(--danger);
+}
+
+.metrics-table .warn {
+    color: var(--syn-number);
+}
+
+.metrics-table .rate-hot {
+    color: var(--syn-boolean);
+    font-weight: bold;
+}
+
+.metrics-table .rate-warm {
+    color: var(--syn-number);
+}
+
+.metrics-table .rate-cold {
+    color: var(--fg-dim);
+}
+
+.metrics-table.compact th,
+.metrics-table.compact td {
+    padding: 3px 6px;
+    font-size: 11px;
+}
+
+.view-switch {
+    margin-bottom: 8px;
+    width: 100%;
+}
+
+.view-switch button {
+    flex: 1;
+}
+
+/* ---- Metrics 侧边栏 ---- */
+.metrics-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.metrics-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.metrics-filter-label {
+    font-size: 11px;
+    color: var(--fg-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.metrics-filter-help {
+    font-size: 11px;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.metrics-filter-help code {
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 4px;
+    font-size: 11px;
+    color: var(--syn-literal);
+}
+
+.metrics-filter-stat {
+    font-size: 11px;
+    margin: 4px 0 0;
+    color: var(--accent);
+}
