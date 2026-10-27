@@ -67,4 +67,29 @@ describe('convertParams', () => {
         const args = await convertParams(descriptor, [], { lazy: async () => 'resolved' });
         expect(args).toEqual(['resolved']);
     });
+
+    it('accepts null for s.null()', async () => {
+        const d = buildDescriptor(
+            { namespace: 'n', signature: [s.void(), s.null()] },
+            () => undefined,
+        );
+        await expect(convertParams(d, [null], {})).resolves.toEqual([null]);
+    });
+
+    it('rejects non-null for s.null()', async () => {
+        const d = buildDescriptor(
+            { namespace: 'n', signature: [s.void(), s.null()] },
+            () => undefined,
+        );
+        await expect(convertParams(d, ['x'], {})).rejects.toMatchObject({ code: INVALID_PARAMS });
+    });
+
+    it('rejects null for union whose members had nullable set', async () => {
+        const d = buildDescriptor(
+            { namespace: 'u', signature: [s.void(), s.union([s.string().nullable(), s.number()])] },
+            () => undefined,
+        );
+        await expect(convertParams(d, [null], {})).rejects.toMatchObject({ code: INVALID_PARAMS });
+    });
+
 });

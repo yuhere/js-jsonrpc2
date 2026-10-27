@@ -62,13 +62,12 @@ export function installDemoMethods(repository: Repository): void {
     repository.register(
         {
             namespace: 'literal.mixed',
-            document: '演示字符串/数字/布尔/null 四种字面量。',
+            document: '演示字符串、数字、布尔三种字面量。',
             signature: [
                 s.unknown(),
-                s.literal('hello').describe('固定字符串'),
-                s.literal(42).describe('固定数字'),
-                s.literal(true).describe('固定布尔'),
-                s.literal(null).describe('固定 null'),
+                s.literal('hello').describe('固定字符串字面量'),
+                s.literal(42).describe('固定数字字面量'),
+                s.literal(true).describe('固定布尔字面量'),
             ],
         },
         (...args: unknown[]) => args,
@@ -136,8 +135,8 @@ export function installDemoMethods(repository: Repository): void {
             document: '固定长度元组，类型混合。',
             signature: [
                 s.unknown(),
-                s.tuple([s.string(), s.number(), s.boolean()]).describe('字符串/数字/布尔元组'),
-                s.tuple([s.literal('v1'), s.literal(2), s.literal(null)]).describe('字面量元组'),
+                s.tuple([s.string(), s.number(), s.boolean()]).describe('字符串、数字、布尔元组'),
+                s.tuple([s.literal('v1'), s.literal(2)]).describe('字面量元组'),
             ],
         },
         (...args: unknown[]) => args,
@@ -187,7 +186,7 @@ export function installDemoMethods(repository: Repository): void {
     repository.register(
         {
             namespace: 'object.strict',
-            document: 'strict 对象：属性必须全存在，且拒绝额外属性。',
+            document: '严格对象：属性必须全部存在，且拒绝额外属性。',
             signature: [
                 s.unknown(),
                 s.object({
@@ -207,14 +206,14 @@ export function installDemoMethods(repository: Repository): void {
             namespace: 'record.basic',
             document: '键值映射。',
             signature: [
-                s.record(s.number()).describe('字符串→数字'),
-                s.record(s.string()).min(1).max(3).describe('1~3 个键的映射'),
+                s.record(s.number()).describe('字符串键到数字值的映射'),
+                s.record(s.string()).min(1).max(3).describe('1~3 个键的字符串映射'),
                 s.record(
                     s.object({
                         x: s.number(),
                         y: s.number(),
                     }),
-                ).describe('字符串→坐标对象'),
+                ).describe('字符串键到坐标对象的映射'),
             ],
         },
         (a: unknown, b: unknown, c: unknown) => ({ a, b, c }),
@@ -228,7 +227,7 @@ export function installDemoMethods(repository: Repository): void {
             namespace: 'union.various',
             document: '不同形态的联合类型。',
             signature: [
-                s.union([s.string(), s.number()]).describe('string | number'),
+                s.union([s.string(), s.number()]).describe('字符串或数字'),
                 s.union([
                     s.object({ kind: s.literal('a'), a: s.number() }),
                     s.object({ kind: s.literal('b'), b: s.string() }),
@@ -247,11 +246,11 @@ export function installDemoMethods(repository: Repository): void {
             namespace: 'nullable.various',
             document: '各种可空类型。',
             signature: [
-                s.string().nullable().describe('string | null'),
-                s.number().nullable().describe('number | null'),
-                s.array(s.string()).nullable().describe('string[] | null'),
-                s.object({ a: s.number() }).nullable().describe('对象 | null'),
-                s.union([s.string(), s.number()]).nullable().describe('联合 | null'),
+                s.string().nullable().describe('可为空的字符串'),
+                s.number().nullable().describe('可为空的数字'),
+                s.array(s.string()).nullable().describe('可为空的字符串数组'),
+                s.object({ a: s.number() }).nullable().describe('可为空的对象'),
+                s.union([s.string(), s.number()]).nullable().describe('可为空的联合'),
             ],
         },
         (...args: unknown[]) => args,
@@ -396,10 +395,10 @@ export function installDemoMethods(repository: Repository): void {
                                             tags: s.array(s.string()),
                                         }),
                                     ),
-                                }).describe('L4'),
-                            }).describe('L3'),
-                        }).describe('L2'),
-                    }).describe('L1'),
+                                }).describe('第四层'),
+                            }).describe('第三层'),
+                        }).describe('第二层'),
+                    }).describe('第一层'),
                     unionField: s.union([
                         s.object({ type: s.literal('a'), a: s.array(s.number()) }),
                         s.object({ type: s.literal('b'), b: s.record(s.string()) }),
@@ -428,7 +427,7 @@ export function installDemoMethods(repository: Repository): void {
                     obj: s.object({ k: s.string() }),
                     rec: s.record(s.boolean()),
                     uni: s.union([s.string(), s.number()]),
-                    en: s.enum(['x', 'y'] as const),
+                    en: s.enum(['x', 'y'] as const).nullable(),
                     lit: s.literal('fixed'),
                     unk: s.unknown(),
                 }).describe('大杂烩对象'),
@@ -443,7 +442,7 @@ export function installDemoMethods(repository: Repository): void {
                     obj: s.object({ k: s.string() }),
                     rec: s.record(s.boolean()),
                     uni: s.union([s.string(), s.number()]),
-                    en: s.enum(['x', 'y'] as const),
+                    en: s.enum(['x', 'y'] as const).nullable(),
                     lit: s.literal('fixed'),
                     unk: s.unknown(),
                 }).describe('大杂烩参数'),
@@ -460,7 +459,7 @@ export function installDemoMethods(repository: Repository): void {
     repository.register(
         {
             namespace: 'stream.strings',
-            document: '每秒发一条 "tick #i"，共 n 条；用于验证基本流式。',
+            document: '每 200ms 发一条 "tick #i"，共 n 条；用于验证基本流式。',
             signature: [
                 s.stream(s.string().describe('字符串流')),
                 s.number().min(1).max(100).describe('条数 n'),
@@ -478,7 +477,7 @@ export function installDemoMethods(repository: Repository): void {
     repository.register(
         {
             namespace: 'stream.objects',
-            document: '流式返回 { idx, label, ok } 对象。',
+            document: '流式返回包含序号、标签、布尔状态的对象。',
             signature: [
                 s.stream(
                     s.object({

@@ -105,7 +105,8 @@ s.string()                 // string
 s.string().min(1).max(64)  // length-constrained string
 s.number()                 // finite number
 s.boolean()                // boolean
-s.literal('2.0')           // exact literal
+s.literal('2.0')           // exact literal (string | number | boolean only)
+s.null()                   // exactly null
 s.array(s.string())        // string[]
 s.object({ id: s.number() })          // open object
 s.object({ id: s.number() }).strict() // all props required, no extras
@@ -113,7 +114,7 @@ s.record(s.number())       // Record<string, number>
 s.union([s.string(), s.number()])
 s.tuple([s.string(), s.number()])
 s.enum(['pending', 'success', 'failed'])
-s.unknown()                // any JSON value
+s.unknown()                // any JSON value (already includes null)
 s.void()                   // RPC-only: no return value
 s.injectable('request')    // RPC-only: server-injected parameter
 ```
@@ -122,6 +123,13 @@ Chainable modifiers: `.min()`, `.max()`, `.nullable()`, `.strict()`,
 `.describe(text)`. Validation: `.parse(input)` (throws
 `SchemaValidationError`) and `.safeParse(input)` (returns a result object).
 Introspection: `.toJSON()` returns a `SchemaDescription`.
+
+Nullability notes:
+
+- `.nullable()` / `.nullable(true)` allow `null`; `.nullable(false)` clears it. All calls are immutable.
+- `s.unknown()` and `s.null()` do not expose `.nullable()`; they already accept / are `null`.
+- `s.literal(v)` accepts `string | number | boolean`. Use `s.null()` for exact null, or `.nullable()` for "literal or null".
+- `s.union([...])` strips member-level nullability; only the union's own `.nullable()` decides whether `null` is accepted.
 
 ## Transports
 

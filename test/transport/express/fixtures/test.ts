@@ -54,6 +54,13 @@ export function installDebugMethods(repository: Repository, options: DebugTestOp
         },
         () => undefined,
     );
+    repository.register(
+        {
+            namespace: 'union.nullable',
+            signature: [s.union([s.string().nullable(), s.number()]).nullable()],
+        },
+        () => null,
+    );
     if (options.withGrant) {
         repository.register(
             {

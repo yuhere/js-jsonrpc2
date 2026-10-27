@@ -150,30 +150,31 @@ Constructors are accessed through `s`.
 
 | Constructor | Meaning |
 |---|---|
-| `s.string()` | String value. |
-| `s.number()` | Number value. |
-| `s.boolean()` | Boolean value. |
-| `s.unknown()` | Any JSON value, including `null`. |
-| `s.literal(value)` | One literal string, number, boolean, or `null`. |
-| `s.enum(values)` | One value from a string enumeration. |
-| `s.array(itemSchema)` | Array whose items conform to `itemSchema`. |
-| `s.object(shape)` | Object described by a property-to-schema map. |
-| `s.record(valueSchema)` | Object whose values conform to a single schema. |
-| `s.union(schemas)` | Value accepted by at least one supplied schema. |
-| `s.tuple(schemas)` | Positional array validated against the supplied schemas. |
+| `s.string()` | String value. Extends `NullableSchema`. |
+| `s.number()` | Number value. Extends `NullableSchema`. |
+| `s.boolean()` | Boolean value. Extends `NullableSchema`. |
+| `s.unknown()` | Any JSON value, including `null`. Does not extend `NullableSchema`; `.nullable()` is not exposed. |
+| `s.null()` | Exactly `null`. Does not extend `NullableSchema`; `.nullable()` is not exposed. |
+| `s.literal(value)` | One literal string, number, or boolean. `null` is rejected at construction. Extends `NullableSchema`. |
+| `s.enum(values)` | One value from a string enumeration. Extends `NullableSchema`. |
+| `s.array(itemSchema)` | Array whose items conform to `itemSchema`. Extends `NullableSchema`. |
+| `s.object(shape)` | Object described by a property-to-schema map. Extends `NullableSchema`. |
+| `s.record(valueSchema)` | Object whose values conform to a single schema. Extends `NullableSchema`. |
+| `s.union(schemas)` | Value accepted by at least one supplied schema. Extends `NullableSchema`. Member schemas are cloned and set to `nullable(false)` at construction. |
+| `s.tuple(schemas)` | Positional array validated against the supplied schemas. Extends `NullableSchema`. |
 
 The marker constructors are `s.void()`, `s.injectable(key)`, and `s.stream(innerSchema)`.
 
 ### 6.3 Common schema methods
 
-Where supported by the schema kind:
+All schemas expose `.describe(text)` and `.toJSON()`. Schemas that extend `NullableSchema` additionally expose nullability control; schema kinds with numeric/structural bounds expose `.min(value)` / `.max(value)`; object schemas expose `.strict()`.
 
-- `.describe(text)` attaches human-readable description metadata.
-- `.nullable()` allows `null` in addition to the schema's ordinary values.
-- `.min(value)` and `.max(value)` add bounds.
-- `.strict()` is available on object schemas to require declared properties and reject unknown properties.
+- `.describe(text)` — attach human-readable description metadata.
+- `.nullable(value?: boolean)` — allow `null` (default `true`); `nullable(false)` clears it. Immutable. Not available on `s.unknown()` or `s.null()`.
+- `.min(value)` and `.max(value)` — add bounds where the schema kind supports them.
+- `.strict()` — available on object schemas; require declared properties and reject unknown properties.
 
-Object schemas are not strict by default. Applications requiring exact object shape SHOULD explicitly call `.strict()`. `s.unknown()` already accepts `null`, so `.nullable()` adds no useful restriction or capability to it.
+Object schemas are not strict by default. Applications requiring exact object shape SHOULD explicitly call `.strict()`. `s.unknown()` already accepts `null`; `.nullable()` is neither exposed nor needed on it. `s.literal(v)` rejects `null` at construction; use `s.null()` for an exact `null` value, or `.nullable()` for "literal or null". `s.union([...])` strips member-level nullability at construction, so only the union's own `.nullable()` decides whether `null` is accepted.
 
 Schemas provide parsing/validation and structured descriptions for introspection. TypeScript types describe compile-time expectations; they do not replace runtime validation of data received over the network.
 

@@ -25,6 +25,7 @@
     --syn-container: #7ee787;
     --syn-object: #79c0ff;
     --syn-union: #ffa657;
+    --syn-nullable: #ff79c6;
     --syn-muted: #8b949e;
 
     --mono: "JetBrains Mono", "Fira Code", Menlo, Consolas, "Courier New", monospace;
@@ -52,6 +53,7 @@
     --syn-container: #116329;
     --syn-object: #0969da;
     --syn-union: #bc4c00;
+    --syn-nullable: #a626a4;
     --syn-muted: #57606a;
 }
 
@@ -391,6 +393,15 @@ textarea:focus {
     color: var(--fg-dim);
 }
 
+.schema-nullable-badge {
+    color: var(--syn-nullable);
+    font-size: 90%;
+    font-weight: bold;
+    letter-spacing: .5px;
+    text-transform: lowercase;
+    opacity: .9;
+}
+
 .schema-constraints {
     color: var(--syn-muted);
     font-size: 90%;
@@ -456,6 +467,15 @@ textarea:focus {
 
 .sf-nullable {
     color: var(--fg-dim);
+}
+
+.sf-nullable-badge {
+    color: var(--syn-nullable);
+    font-size: 90%;
+    font-weight: bold;
+    letter-spacing: .5px;
+    text-transform: lowercase;
+    opacity: .9;
 }
 
 .sf-desc {

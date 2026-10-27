@@ -159,30 +159,31 @@ Schema 系统描述与 JSON 兼容的值。其 JSON 类型模型包括字符串�
 
 | 构造器 | 含义 |
 |---|---|
-| `s.string()` | 字符串值。 |
-| `s.number()` | 数字值。 |
-| `s.boolean()` | 布尔值。 |
-| `s.unknown()` | 任意 JSON 值，包括 `null`。 |
-| `s.literal(value)` | 指定的字符串、数字、布尔值或 `null` 字面量。 |
-| `s.enum(values)` | 字符串枚举中的一个值。 |
-| `s.array(itemSchema)` | 元素均符合 `itemSchema` 的数组。 |
-| `s.object(shape)` | 由属性到 Schema 的映射描述的对象。 |
-| `s.record(valueSchema)` | 所有属性值均符合指定 Schema 的对象。 |
-| `s.union(schemas)` | 至少符合一个给定 Schema 的值。 |
-| `s.tuple(schemas)` | 按位置使用给定 Schema 校验的数组。 |
+| `s.string()` | 字符串值。继承 `NullableSchema`。 |
+| `s.number()` | 数字值。继承 `NullableSchema`。 |
+| `s.boolean()` | 布尔值。继承 `NullableSchema`。 |
+| `s.unknown()` | 任意 JSON 值，包括 `null`。不继承 `NullableSchema`；不暴露 `.nullable()`。 |
+| `s.null()` | 精确的 `null`。不继承 `NullableSchema`；不暴露 `.nullable()`。 |
+| `s.literal(value)` | 指定的字符串、数字或布尔值字面量。`null` 在构造时被拒绝。继承 `NullableSchema`。 |
+| `s.enum(values)` | 字符串枚举中的一个值。继承 `NullableSchema`。 |
+| `s.array(itemSchema)` | 元素均符合 `itemSchema` 的数组。继承 `NullableSchema`。 |
+| `s.object(shape)` | 由属性到 Schema 的映射描述的对象。继承 `NullableSchema`。 |
+| `s.record(valueSchema)` | 所有属性值均符合指定 Schema 的对象。继承 `NullableSchema`。 |
+| `s.union(schemas)` | 至少符合一个给定 Schema 的值。继承 `NullableSchema`。构造时会把每个成员 clone 并 `nullable(false)`。 |
+| `s.tuple(schemas)` | 按位置使用给定 Schema 校验的数组。继承 `NullableSchema`。 |
 
 标记构造器包括 `s.void()`、`s.injectable(key)` 和 `s.stream(innerSchema)`。
 
 ### 6.3 通用 Schema 方法
 
-根据具体 Schema 类型的支持情况，可以使用以下方法：
+所有 Schema 都提供 `.describe(text)` 和 `.toJSON()`。继承 `NullableSchema` 的 Schema 额外提供 nullability 控制；支持边界约束的 Schema 提供 `.min(value)` / `.max(value)`；对象 Schema 提供 `.strict()`。
 
 - `.describe(text)`：附加便于人类阅读的描述元数据。
-- `.nullable()`：在原有允许值的基础上允许 `null`。
-- `.min(value)` 和 `.max(value)`：添加边界约束。
+- `.nullable(value?: boolean)`：允许 `null`（默认 `true`）；`nullable(false)` 撤销。不可变。`s.unknown()` 与 `s.null()` 不提供此方法。
+- `.min(value)` 和 `.max(value)`：在 Schema 类型支持时添加边界约束。
 - `.strict()`：用于对象 Schema，要求声明的属性存在，并拒绝未声明的属性。
 
-对象 Schema 默认不是严格模式。需要精确对象结构的应用 **SHOULD** 显式调用 `.strict()`。`s.unknown()` 本身已经接受 `null`，因此对其调用 `.nullable()` 不会增加实际能力。
+对象 Schema 默认不是严格模式。需要精确对象结构的应用 **SHOULD** 显式调用 `.strict()`。`s.unknown()` 本身已经接受 `null`，因此 `.nullable()` 既不暴露也无必要。`s.literal(v)` 在构造时拒绝 `null`；要表达「就是 null」用 `s.null()`，要表达「字面量或 null」用 `.nullable()`。`s.union([...])` 在构造时会剥离成员的 nullable，只有 union 自身的 `.nullable()` 决定是否接受 `null`。
 
 Schema 提供解析/校验能力以及用于自省的结构化描述。TypeScript 类型描述编译期预期，不能替代对网络接收数据的运行时校验。
 

@@ -124,7 +124,7 @@ describe("LiteralSchema", () => {
         expect(s.literal("hello").parse("hello")).toBe("hello");
         expect(s.literal(42).parse(42)).toBe(42);
         expect(s.literal(true).parse(true)).toBe(true);
-        expect(s.literal(null).parse(null)).toBe(null);
+        expect(s.null().parse(null)).toBe(null);
 
         expect(() => s.literal("hello").parse("world")).toThrow();
         expect(() => s.literal(42).parse("42")).toThrow();
@@ -142,6 +142,12 @@ describe("LiteralSchema", () => {
             constraints: { value: "jsonrpc" },
         });
     });
+
+    it("rejects null at construction time", () => {
+        // @ts-expect-error — LiteralValue 不含 null
+        expect(() => s.literal(null)).toThrow(TypeError);
+    });
+
 });
 
 describe("ArraySchema", () => {
@@ -371,6 +377,34 @@ describe("UnionSchema", () => {
     });
 });
 
+describe("UnionSchema member nullability stripping", () => {
+    it("strips member-level nullable at construction", () => {
+        const schema = s.union([s.string().nullable(), s.number()]);
+        expect(() => schema.parse(null)).toThrow(SchemaValidationError);
+        expect(schema.parse("x")).toBe("x");
+        expect(schema.parse(1)).toBe(1);
+    });
+
+    it("member nullable in toJSON is removed", () => {
+        const desc = s.union([s.string().nullable(), s.number()]).toJSON();
+        const options = (desc.children as { options: any[] }).options;
+        expect(options[0].nullable).toBeUndefined();
+        expect(options[1].nullable).toBeUndefined();
+    });
+
+    it("union-level .nullable() still allows null", () => {
+        const schema = s.union([s.string().nullable(), s.number()]).nullable();
+        expect(schema.parse(null)).toBe(null);
+    });
+
+    it("does not mutate the passed-in member schema", () => {
+        const member = s.string().nullable();
+        s.union([member, s.number()]);
+        // 原实例仍然允许 null
+        expect(member.parse(null)).toBe(null);
+    });
+});
+
 
 describe("TupleSchema", () => {
     it("test 1", () => {
@@ -484,37 +518,30 @@ describe("UnknownSchema", () => {
     });
 });
 
-describe("NullableSchema", () => {
-    it("accepts null and values accepted by the inner schema", () => {
-        const stringSchema = s.string().nullable();
-
-        expect(stringSchema.parse(null)).toBe(null);
-        expect(stringSchema.parse("hello")).toBe("hello");
-        expect(() => stringSchema.parse(123)).toThrow();
+describe("NullableSchema .nullable(bool)", () => {
+    it("defaults to true", () => {
+        expect(s.string().nullable().parse(null)).toBe(null);
+        expect(s.string().nullable(true).parse(null)).toBe(null);
     });
 
-    it("works with arrays, objects, unions and enums", () => {
-        expect(s.array(s.number()).nullable().parse(null)).toBe(null);
-
-        expect(
-            s.object({ name: s.string() }).nullable().parse(null),
-        ).toBe(null);
-
-        expect(s.union([s.string(), s.number()]).nullable().parse(null)).toBe(
-            null,
-        );
-
-        expect(s.enum(["a", "b"]).nullable().parse(null)).toBe(null);
+    it("nullable(false) clears a previously-set flag", () => {
+        const schema = s.string().nullable().nullable(false);
+        expect(() => schema.parse(null)).toThrow(SchemaValidationError);
+        expect(schema.toJSON().nullable).toBeUndefined();
     });
 
-    it("describes nullable schemas", () => {
-        expect(s.string().nullable().toJSON()).toMatchObject({
-            kind: "nullable",
-            nullable: true,
-            children: {
-                inner: { kind: "string" },
-            },
-        });
+    it("nullable(false) on a fresh schema is a no-op", () => {
+        const schema = s.string().nullable(false);
+        expect(schema.toJSON().nullable).toBeUndefined();
+        expect(() => schema.parse(null)).toThrow(SchemaValidationError);
+    });
+
+    it("is immutable: original instance unchanged", () => {
+        const base = s.string();
+        const nullable = base.nullable();
+        expect(nullable).not.toBe(base);
+        expect(() => base.parse(null)).toThrow(SchemaValidationError);
+        expect(nullable.parse(null)).toBe(null);
     });
 });
 
@@ -605,5 +632,29 @@ describe("Schema extension", () => {
         expect(even.parse(2)).toBe(2);
         expect(() => even.parse(3)).toThrow();
         expect(even.toJSON().constraints).toEqual({ even: true });
+    });
+});
+
+
+
+describe("NullSchema", () => {
+    it("accepts only null", () => {
+        expect(s.null().parse(null)).toBe(null);
+    });
+
+    it("rejects every non-null value", () => {
+        for (const value of [0, "", false, [], {}, "null", undefined]) {
+            expect(() => s.null().parse(value)).toThrow(SchemaValidationError);
+        }
+    });
+
+    it("describes itself as kind 'null' and has no nullable flag", () => {
+        expect(s.null().toJSON()).toEqual({ kind: "null" });
+    });
+
+    it("does not expose .nullable()", () => {
+        // @ts-expect-error — NullSchema 不继承 NullableSchema
+        const _ = s.null().nullable;
+        void _;
     });
 });

@@ -17,8 +17,8 @@ const KIND_COLORS: Record<string, string> = {
     record: 'var(--syn-object)',
     union: 'var(--syn-union)',
     enum: 'var(--syn-union)',
-    nullable: 'var(--syn-muted)',
     unknown: 'var(--syn-muted)',
+    null: 'var(--syn-muted)',
 };
 
 function colorOf(kind: string): string {
@@ -93,33 +93,20 @@ function SchemaField({
     const [open, setOpen] = useState(defaultOpen);
     const kind = schema.kind;
 
-    // ── nullable 包装：标题 + 控制按钮同行，下面递归或显示 null ──
-    if (kind === 'nullable') {
-        const inner =
-            schema.children && isSchema(schema.children.inner)
-                ? schema.children.inner
-                : undefined;
-        if (!inner) {
-            return (
-                <UnknownLeaf
-                    schema={schema}
-                    value={value}
-                    onChange={onChange}
-                    label={label}
-                    depth={depth}
-                    disabled={disabled}
-                />
-            );
-        }
-
+    // ── nullable 标记：标题 + 控制按钮同行，下面递归真实 kind ──
+    if (schema.nullable) {
         const isNull = value === null || value === undefined;
         return (
             <div className="sf-node sf-row" style={{ paddingLeft: depth * 14 }}>
                 <div className="sf-head sf-head-inline">
                     {label !== undefined && <span className="sf-label">{label}</span>}
-                    <span className="sf-kind" style={{ color: colorOf('nullable') }}>
-                        nullable
+                    <span className="sf-kind" style={{ color: colorOf(kind) }}>
+                        {kind}
                     </span>
+                    <span className="sf-nullable-badge">nullable</span>
+                    {schema.description && (
+                        <span className="sf-desc">— {schema.description}</span>
+                    )}
                     {!isNull && (
                         <button
                             type="button"
@@ -135,7 +122,14 @@ function SchemaField({
                             type="button"
                             className="tiny"
                             disabled={disabled}
-                            onClick={() => onChange(sampleFromSchema(inner))}
+                            onClick={() =>
+                                onChange(
+                                    sampleFromSchema({
+                                        ...schema,
+                                        nullable: false,
+                                    }),
+                                )
+                            }
                         >
                             填值
                         </button>
@@ -146,7 +140,7 @@ function SchemaField({
                         <span className="sf-null-indicator">null</span>
                     ) : (
                         <SchemaField
-                            schema={inner}
+                            schema={{ ...schema, nullable: false }}
                             value={value}
                             onChange={onChange}
                             depth={0}
@@ -252,7 +246,7 @@ function SchemaField({
         );
     }
 
-    // ── unknown / 其他兜底 ──
+    // ── unknown / null / 其他兜底 ──
     return (
         <UnknownLeaf
             schema={schema}
@@ -275,7 +269,8 @@ function isScalarKind(kind: string): boolean {
         kind === 'number' ||
         kind === 'boolean' ||
         kind === 'enum' ||
-        kind === 'literal'
+        kind === 'literal' ||
+        kind === 'null'
     );
 }
 
@@ -340,6 +335,13 @@ function ScalarInput({
                     <code className="literal-value">
                         {JSON.stringify(schema.constraints?.value ?? null)}
                     </code>
+                    <span className="hint">（固定值）</span>
+                </div>
+            );
+        case 'null':
+            return (
+                <div className="sf-scalar">
+                    <code className="literal-value">null</code>
                     <span className="hint">（固定值）</span>
                 </div>
             );
@@ -627,7 +629,7 @@ function AddRecordKey({
 }
 
 // ─────────────────────────────────────────────────────────────
-// unknown：JSON textarea（标题 + textarea 同一行）
+// unknown / null：JSON textarea（标题 + textarea 同一行）
 // ─────────────────────────────────────────────────────────────
 
 function UnknownLeaf({

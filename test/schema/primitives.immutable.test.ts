@@ -84,6 +84,38 @@ describe("immutable schema modifiers", () => {
     expect(recordBase.parse({})).toEqual({});
     expect(() => oneKey.parse({})).toThrow(SchemaValidationError);
   });
+
+  it('nullable combines immutably with describe and min', () => {
+    const base = s.string().min(2);
+    const nullable = base.nullable().describe('Name');
+    expect(nullable).not.toBe(base);
+    expect(base.toJSON()).toMatchObject({ kind: 'string', constraints: { min: 2 } });
+    expect(base.toJSON().nullable).toBeUndefined();
+    expect(nullable.toJSON()).toMatchObject({
+      kind: 'string',
+      nullable: true,
+      description: 'Name',
+      constraints: { min: 2 },
+    });
+    expect(() => base.parse(null)).toThrow(SchemaValidationError);
+    expect(nullable.parse(null)).toBe(null);
+  });
+
+  it('object with s.null() property', () => {
+    const schema = s.object({ n: s.null() });
+    expect(schema.parse({ n: null })).toEqual({ n: null });
+    expect(schema.parse({})).toEqual({}); // 非 strict：缺失跳过
+    expect(() => schema.parse({ n: 'x' })).toThrow();
+  });
+
+  it('nullable(false) applies uniformly to tuple and enum', () => {
+    const tuple = s.tuple([s.string()]).nullable().nullable(false);
+    expect(() => tuple.parse(null)).toThrow(SchemaValidationError);
+
+    const en = s.enum(['a']).nullable().nullable(false);
+    expect(() => en.parse(null)).toThrow(SchemaValidationError);
+  });
+
 });
 
 // Compile-time sanity check: strict() narrows the inferred object shape.

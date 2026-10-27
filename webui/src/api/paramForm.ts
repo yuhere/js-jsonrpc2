@@ -7,10 +7,11 @@ export function isSchema(v: unknown): v is SchemaDescription {
 
 /**
  * 根据 schema 生成一个合理的示例值。
+ * - nullable 优先返回 null
+ * - null 直接返回 null
  * - 原始类型返回零值（''、0、false）
  * - literal 返回固定值
  * - enum 返回第一个枚举值
- * - nullable 返回 null
  * - 容器类型递归展开
  * - unknown 返回 null
  */
@@ -24,14 +25,14 @@ export function sampleFromSchema(schema: SchemaDescription): unknown {
             return 0;
         case 'boolean':
             return false;
+        case 'null':
+            return null;
         case 'literal':
             return schema.constraints?.value ?? null;
         case 'enum': {
             const values = schema.constraints?.values;
             return Array.isArray(values) && values.length > 0 ? values[0] : '';
         }
-        case 'nullable':
-            return isSchema(c.inner) ? sampleFromSchema(c.inner) : null;
         case 'array': {
             const item = isSchema(c.items) ? sampleFromSchema(c.items) : null;
             return [item];

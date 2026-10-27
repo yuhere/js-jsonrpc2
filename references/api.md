@@ -103,6 +103,8 @@ The root export `s` combines constructors from `schema/json/primitives` and `sch
 
 ### Base schema behavior
 
+`Schema<T>` is the abstract base for all schemas; it carries only `description` and the common parse/introspection API. Nullability is provided by a dedicated intermediate base class `NullableSchema<T>` (which extends `Schema<T | null>`).
+
 `Schema<T>` exposes:
 
 - `parse(input: unknown): T` — validate and return the parsed value; throws `SchemaValidationError` on validation failure.
@@ -110,10 +112,15 @@ The root export `s` combines constructors from `schema/json/primitives` and `sch
 - `describe(description: string): this` — return a schema clone with a human-readable description.
 - `getDescription(): string | undefined`.
 - `toJSON()` — serialize a structured `SchemaDescription` for introspection/UI use.
-- Nullable-capable schema types expose `.nullable()` where supported.
-- Bounded schema types expose `.min(value)` and `.max(value)` where supported.
 
-`SchemaDescription` has `kind`, optional `description`, optional `nullable`, optional `constraints`, and optional `children`.
+`NullableSchema<T>` additionally exposes:
+
+- `nullable(value?: boolean): this` — return a clone with the nullability flag set (default `true`); `nullable(false)` clears it. Immutable.
+- `isNullable(): boolean`.
+
+Bounded schema types expose `.min(value)` and `.max(value)` where supported.
+
+`SchemaDescription` has `kind`, optional `description`, optional `nullable`, optional `constraints`, and optional `children`. The `nullable` field is the single source of truth for nullability; `kind` always reflects the value's real shape.
 
 `SchemaValidationError` extends `Error` and exposes `path: string[]`, identifying the failing nested path.
 
@@ -121,23 +128,31 @@ The root export `s` combines constructors from `schema/json/primitives` and `sch
 
 | Constructor | Meaning and constraints |
 |---|---|
-| `s.string()` | Validates strings. Supports the bounded string API (`min`, `max`) and nullable/description methods inherited by its base. |
-| `s.number()` | Validates numbers. Supports numeric bounds (`min`, `max`) and nullable/description methods. Confirm special-number policy from the implementation before depending on NaN/Infinity behavior. |
-| `s.boolean()` | Validates booleans; supports description and nullable behavior. |
-| `s.unknown()` | Accepts any JSON value, including `null`; nullable is unnecessary/not exposed. |
-| `s.literal(value)` | Accepts the specified literal value. `value` is restricted to `string \| number \| boolean \| null`. |
-| `s.enum(values)` | Accepts one of a non-empty tuple of strings. |
-| `s.array(itemSchema)` | Validates an array whose items match the schema. Supports `.min(n)` and `.max(n)` where bounds are non-negative integers. |
-| `s.object(shape)` | Validates an object with the declared properties. By default, missing declared properties are omitted from the output and unknown keys are not rejected. |
+| `s.unknown()` | Accepts any JSON value, including `null`. Does not extend `NullableSchema`; `.nullable()` is not exposed (and would be redundant). |
+| `s.null()` | Accepts only `null`. Does not extend `NullableSchema`; `.nullable()` is not exposed. |
+| `s.literal(value)` | Accepts the specified literal value. `value` is restricted to `string \| number \| boolean`; `null` is rejected at construction time — use `s.null()` or `.nullable()`. |
+| `s.string()` | Validates strings. Extends `NullableSchema`; supports `.min`, `.max`, `.nullable`, `.describe`. |
+| `s.number()` | Validates numbers. Extends `NullableSchema`; supports `.min`, `.max`, `.nullable`, `.describe`. Confirm special-number policy from the implementation before depending on NaN/Infinity behavior. |
+| `s.boolean()` | Validates booleans. Extends `NullableSchema`; supports `.nullable`, `.describe`. |
+| `s.enum(values)` | Accepts one of a non-empty tuple of strings. Extends `NullableSchema`; supports `.nullable`, `.describe`. |
+| `s.array(itemSchema)` | Validates an array whose items match the schema. Extends `NullableSchema`; supports `.min`, `.max`, `.nullable`, `.describe`. |
+| `s.object(shape)` | Validates an object with the declared properties. Extends `NullableSchema`. By default, missing declared properties are omitted from the output and unknown keys are not rejected. |
 | `s.object(shape).strict()` | Requires every declared property and rejects undeclared properties; returns a stricter inferred output type. |
-| `s.record(valueSchema)` | Validates an object whose values all match the supplied schema. |
-| `s.union([schema, ...])` | Accepts a value matching at least one schema; requires a non-empty tuple. |
-| `s.tuple([schema, ...])` | Validates a tuple against its positional schemas; requires a non-empty tuple. |
+| `s.record(valueSchema)` | Validates an object whose values all match the supplied schema. Extends `NullableSchema`; supports `.min`, `.max`, `.nullable`, `.describe`. |
+| `s.union([schema, ...])` | Accepts a value matching at least one schema; requires a non-empty tuple. Extends `NullableSchema`. Member schemas are cloned and set to `nullable(false)` at construction — nullability is decided by the union itself via `.nullable()`. |
+| `s.tuple([schema, ...])` | Validates a tuple against its positional schemas; requires a non-empty tuple. Extends `NullableSchema`; supports `.nullable`, `.describe`. |
 | `s.void()` | Control marker for a method return slot with no meaningful result; not a JSON data schema. |
-| `s.injectable(key)` | Control marker for a server-injected parameter. `key` is a string and is resolved from server-side injectables. |
 | `s.stream(innerSchema)` | Control marker for a streaming return slot, carrying the schema for each streamed value. |
+| `s.injectable(key)` | Control marker for a server-injected parameter. `key` is a string and is resolved from server-side injectables. |
 
 For bounded schemas, use `.min()` and `.max()` according to the schema kind. Array/string/record bounds are non-negative integers in the implementation excerpts; number bounds are numeric. Exact method return types are best checked in the package declarations.
+
+### Nullability rules
+
+- `.nullable()` / `.nullable(true)` allow `null`; `.nullable(false)` clears the flag. All calls are immutable and return a clone.
+- `s.unknown()` and `s.null()` do not expose `.nullable()` — they already accept (or are) `null`.
+- `s.literal(v)` rejects `null` at construction; use `s.null()` for exact null, or `.nullable()` for "literal or null".
+- `s.union([...])` strips member-level nullability at construction; only the union's own `.nullable()` affects whether `null` is accepted.
 
 ### Signature slot types
 

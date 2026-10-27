@@ -20,8 +20,8 @@ const KIND_COLORS: Record<string, string> = {
     record: 'var(--syn-object)',
     union: 'var(--syn-union)',
     enum: 'var(--syn-union)',
-    nullable: 'var(--syn-muted)',
     unknown: 'var(--syn-muted)',
+    null: 'var(--syn-muted)',
     stream: 'var(--syn-container)',
 };
 
@@ -64,7 +64,7 @@ function SchemaNode({ schema, depth, defaultOpen, label }: NodeProps) {
                     {schema.kind}
                 </span>
                 {schema.kind === 'stream' && <span className="schema-nullable">&lt;stream&gt;</span>}
-                {schema.nullable && <span className="schema-nullable">| null</span>}
+                {schema.nullable && <span className="schema-nullable-badge">nullable</span>}
                 {constraintsText && <span className="schema-constraints">{`{ ${constraintsText} }`}</span>}
                 {schema.description && (
                     <span className="schema-description" title={schema.description}>
@@ -84,7 +84,7 @@ function renderChildren(schema: SchemaDescription, depth: number): React.ReactNo
     const c = schema.children ?? {};
     const out: React.ReactNode[] = [];
 
-    // nullable / stream 包装器
+    // stream 包装器
     if (c.inner && isSchemaDescription(c.inner)) {
         out.push(<SchemaNode key="inner" schema={c.inner} depth={depth} defaultOpen />);
     }

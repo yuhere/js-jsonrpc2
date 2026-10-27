@@ -105,4 +105,20 @@ describe('express integration', () => {
         const help = await rpc(app, JSON.stringify({ jsonrpc: '2.0', method: 'system.methodHelp', params: ['system.listMethods'], id: 1 }));
         expect(typeof help.body.result).toBe('string');
     });
+
+    it('system.methodSignature reports nullable union without member nullability', async () => {
+        const { app } = buildApp();
+        const res = await rpc(app, JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'system.methodSignature',
+            params: ['union.nullable'],
+            id: 1,
+        }));
+        const [ret] = res.body.result;
+        expect(ret.kind).toBe('union');
+        expect(ret.nullable).toBe(true);
+        const options = ret.children.options;
+        expect(options.every((o: any) => o.nullable === undefined)).toBe(true);
+    });
+
 });

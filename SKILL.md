@@ -27,10 +27,16 @@ Hard constraints (by design, do not work around):
 5. Write `handler` so its positional args match the non-injectable slots in order;
    injectable slots are filled at their declared positions.
 6. Use `s.*` factories for schemas: `s.string()`, `s.number()`, `s.boolean()`,
-   `s.literal(v)`, `s.array(item)`, `s.object(shape)`, `s.record(v)`,
-   `s.union([...])`, `s.tuple([...])`, `s.enum([...])`, `s.unknown()`.
-7. Chain modifiers before registering: `.min()`, `.max()`, `.nullable()`,
+   `s.literal(v)` (`v` is `string | number | boolean` only), `s.null()`,
+   `s.array(item)`, `s.object(shape)`, `s.record(v)`, `s.union([...])`,
+   `s.tuple([...])`, `s.enum([...])`, `s.unknown()`.
+7. Chain modifiers before registering: `.min()`, `.max()`, `.nullable(bool)`,
    `.strict()`, `.describe(text)`.
+8. Nullability rules:
+   - `.nullable()` / `.nullable(true)` allow `null`; `.nullable(false)` clears it. Calls are immutable.
+   - `s.unknown()` and `s.null()` already handle `null`; they do not expose `.nullable()`.
+   - `s.literal(v)` rejects `null`; use `s.null()` for exact null, `.nullable()` for "literal or null".
+   - `s.union([...])` strips member-level nullability at construction; use `s.union([...]).nullable()` to accept `null`.
 
 ```ts
 import { createRepository, s } from '@yuhere/js-jsonrpc2';
@@ -235,3 +241,15 @@ so `system.methodHelp` returns useful text.
 - **Treating a terminal `error` frame as a broken connection.** A mid-stream
   throw is delivered as `{ done: true, error }`; the HTTP/WS/stdio response
   itself ends cleanly. Only transport-level failures abort the connection.
+- **Calling `.nullable()` on `s.unknown()` or `s.null()`.** Those schemas do not
+  extend `NullableSchema`; the call is a TypeScript error. Use `.nullable()` on
+  the concrete schema instead (e.g. `s.string().nullable()`), or `s.null()`
+  when the value must be exactly `null`.
+- **Expecting member-level `.nullable()` inside a union to matter.**
+  `s.union([s.string().nullable(), s.number()])` is equivalent to
+  `s.union([s.string(), s.number()])` — members are cloned and set to
+  `nullable(false)` at construction. Put `.nullable()` on the union itself:
+  `s.union([s.string(), s.number()]).nullable()`.
+- **Calling `s.literal(null)`.** `literal` only accepts `string | number |
+  boolean`; construction throws `TypeError`. Use `s.null()` for exact null, or
+  `.nullable()` for "literal or null".

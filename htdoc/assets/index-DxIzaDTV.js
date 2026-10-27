@@ -8280,8 +8280,8 @@ var KIND_COLORS$1 = {
 	record: "var(--syn-object)",
 	union: "var(--syn-union)",
 	enum: "var(--syn-union)",
-	nullable: "var(--syn-muted)",
 	unknown: "var(--syn-muted)",
+	null: "var(--syn-muted)",
 	stream: "var(--syn-container)"
 };
 function colorOf$1(kind) {
@@ -8323,8 +8323,8 @@ function SchemaNode({ schema, depth, defaultOpen, label }) {
 					children: "<stream>"
 				}),
 				schema.nullable && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-					className: "schema-nullable",
-					children: "| null"
+					className: "schema-nullable-badge",
+					children: "nullable"
 				}),
 				constraintsText && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 					className: "schema-constraints",
@@ -8457,10 +8457,11 @@ function isSchema$1(v) {
 }
 /**
 * 根据 schema 生成一个合理的示例值。
+* - nullable 优先返回 null
+* - null 直接返回 null
 * - 原始类型返回零值（''、0、false）
 * - literal 返回固定值
 * - enum 返回第一个枚举值
-* - nullable 返回 null
 * - 容器类型递归展开
 * - unknown 返回 null
 */
@@ -8471,12 +8472,12 @@ function sampleFromSchema(schema) {
 		case "string": return "";
 		case "number": return 0;
 		case "boolean": return false;
+		case "null": return null;
 		case "literal": return schema.constraints?.value ?? null;
 		case "enum": {
 			const values = schema.constraints?.values;
 			return Array.isArray(values) && values.length > 0 ? values[0] : "";
 		}
-		case "nullable": return isSchema$1(c.inner) ? sampleFromSchema(c.inner) : null;
 		case "array": return [isSchema$1(c.items) ? sampleFromSchema(c.items) : null];
 		case "tuple": return (Array.isArray(c.items) ? c.items : []).map((it) => isSchema$1(it) ? sampleFromSchema(it) : null);
 		case "union": {
@@ -8506,8 +8507,8 @@ var KIND_COLORS = {
 	record: "var(--syn-object)",
 	union: "var(--syn-union)",
 	enum: "var(--syn-union)",
-	nullable: "var(--syn-muted)",
-	unknown: "var(--syn-muted)"
+	unknown: "var(--syn-muted)",
+	null: "var(--syn-muted)"
 };
 function colorOf(kind) {
 	return KIND_COLORS[kind] ?? "var(--fg)";
@@ -8536,16 +8537,7 @@ function SchemaForm({ params, values, onChange, disabled }) {
 function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = true, disabled }) {
 	const [open, setOpen] = (0, import_react.useState)(defaultOpen);
 	const kind = schema.kind;
-	if (kind === "nullable") {
-		const inner = schema.children && isSchema$1(schema.children.inner) ? schema.children.inner : void 0;
-		if (!inner) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UnknownLeaf, {
-			schema,
-			value,
-			onChange,
-			label,
-			depth,
-			disabled
-		});
+	if (schema.nullable) {
 		const isNull = value === null || value === void 0;
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "sf-node sf-row",
@@ -8559,8 +8551,16 @@ function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = 
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 						className: "sf-kind",
-						style: { color: colorOf("nullable") },
+						style: { color: colorOf(kind) },
+						children: kind
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: "sf-nullable-badge",
 						children: "nullable"
+					}),
+					schema.description && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+						className: "sf-desc",
+						children: ["— ", schema.description]
 					}),
 					!isNull && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
@@ -8573,7 +8573,10 @@ function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = 
 						type: "button",
 						className: "tiny",
 						disabled,
-						onClick: () => onChange(sampleFromSchema(inner)),
+						onClick: () => onChange(sampleFromSchema({
+							...schema,
+							nullable: false
+						})),
 						children: "填值"
 					})
 				]
@@ -8583,7 +8586,10 @@ function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = 
 					className: "sf-null-indicator",
 					children: "null"
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaField, {
-					schema: inner,
+					schema: {
+						...schema,
+						nullable: false
+					},
 					value,
 					onChange,
 					depth: 0,
@@ -8705,7 +8711,7 @@ function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = 
 	});
 }
 function isScalarKind(kind) {
-	return kind === "string" || kind === "number" || kind === "boolean" || kind === "enum" || kind === "literal";
+	return kind === "string" || kind === "number" || kind === "boolean" || kind === "enum" || kind === "literal" || kind === "null";
 }
 function ScalarInput({ schema, value, onChange, disabled }) {
 	switch (schema.kind) {
@@ -8743,6 +8749,16 @@ function ScalarInput({ schema, value, onChange, disabled }) {
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", {
 				className: "literal-value",
 				children: JSON.stringify(schema.constraints?.value ?? null)
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "hint",
+				children: "（固定值）"
+			})]
+		});
+		case "null": return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "sf-scalar",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", {
+				className: "literal-value",
+				children: "null"
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 				className: "hint",
 				children: "（固定值）"
@@ -9474,4 +9490,4 @@ function App() {
 import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }));
 //#endregion
 
-//# sourceMappingURL=index-sVQlhxjI.js.map
+//# sourceMappingURL=index-DxIzaDTV.js.map

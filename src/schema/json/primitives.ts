@@ -16,6 +16,13 @@ export type SchemaKind = string;
 export interface SchemaDescription {
   kind: SchemaKind;
   description?: string;
+  /**
+   * 该值是否允许为 null。
+   *
+   * 唯一真相来源：由 `NullableSchema` 及其子类通过 `.nullable(bool)` 设置，
+   * `UnknownSchema` / `NullSchema` 不使用该字段（它们本身就接受 null）。
+   * `kind` 永远表示值的真实形状，不会被 nullability 污染。
+   */
   nullable?: boolean;
   constraints?: Record<string, unknown>;
   children?: Record<string, unknown>;
@@ -32,10 +39,11 @@ export class SchemaValidationError extends Error {
 }
 
 /**
- * 所有 Schema 的共同基类。
+ * 所有 Schema 的抽象基类。
  *
- * 不包含 nullable()，因此 UnknownSchema 可以天然接受 null，
- * 同时不会暴露无意义的 nullable() 方法。
+ * 只负责 description 与描述输出；nullability 由 `NullableSchema` 提供。
+ * `UnknownSchema` / `NullSchema` 直接继承本类——它们天然接受 null，
+ * 不需要 `.nullable()`。
  */
 export abstract class Schema<T> {
   abstract readonly kind: SchemaKind;
@@ -52,7 +60,6 @@ export abstract class Schema<T> {
 
   /**
    * 创建保留原型和现有字段的新实例，供不可变链式方法使用。
-   * Schema 子类的状态字段会一并复制，因此扩展类仍保留自身原型和状态。
    */
   protected cloneWith(updates: Record<string, unknown>): this {
     const clone = Object.assign(
@@ -108,57 +115,46 @@ export abstract class Schema<T> {
 }
 
 /**
- * 普通 JSON Schema 的基类。
- * 通过 nullable() 显式接受 null。
- */
-export abstract class NullableCapableSchema<T> extends Schema<T> {
-  nullable(): NullableSchema<T> {
-    return new NullableSchema(this);
-  }
-}
-
-/**
- * nullable 包装器。
+ * 支持 nullability 的 Schema 基类。
  *
- * 注意：NullableSchema 不提供 nullable()，
- * 避免无意义的重复 nullable 调用。
+ * 除 `UnknownSchema` / `NullSchema` 外的所有具体 Schema 都继承本类。
+ *
+ * - `nullable()` / `nullable(true)`  → 允许 null
+ * - `nullable(false)`                → 不允许 null（撤销之前的标记）
+ *
+ * `_parse` 在调用子类 `_parseValue` 前统一做 null 短路；
+ * `toJSON()` 在基类输出上附加 `nullable: true`。
  */
-export class NullableSchema<T> extends Schema<T | null> {
-  readonly kind = "nullable" as const;
+export abstract class NullableSchema<T> extends Schema<T | null> {
+  private _nullable: boolean = false;
 
-  constructor(private readonly inner: Schema<T>) {
-    super();
+  nullable(value: boolean = true): this {
+    return this.cloneWith({ _nullable: value });
+  }
+
+  isNullable(): boolean {
+    return this._nullable;
   }
 
   protected _parse(input: unknown, path: string[]): T | null {
-    if (input === null) {
+    if (this._nullable && input === null) {
       return null;
     }
-
-    try {
-      return this.inner.parse(input);
-    } catch (error) {
-      if (error instanceof SchemaValidationError) {
-        throw new SchemaValidationError(error.message, [
-          ...path,
-          ...error.path,
-        ]);
-      }
-
-      throw error;
-    }
+    return this._parseValue(input, path);
   }
 
-  protected _describe(): SchemaDescription {
-    return {
-      kind: "nullable",
-      nullable: true,
-      children: { inner: this.inner.toJSON() },
-    };
+  protected abstract _parseValue(input: unknown, path: string[]): T;
+
+  override toJSON(): SchemaDescription {
+    const result = super.toJSON();
+    if (this._nullable) {
+      result.nullable = true;
+    }
+    return result;
   }
 }
 
-export class StringSchema<K extends string = "string"> extends NullableCapableSchema<string> {
+export class StringSchema<K extends string = "string"> extends NullableSchema<string> {
   readonly kind = "string" as K;
 
   constructor() {
@@ -178,7 +174,7 @@ export class StringSchema<K extends string = "string"> extends NullableCapableSc
     return this.cloneWith({ maximum: value });
   }
 
-  protected _parse(input: unknown, path: string[]): string {
+  protected _parseValue(input: unknown, path: string[]): string {
     if (typeof input !== "string") {
       return this.fail("Expected a string", path);
     }
@@ -211,7 +207,7 @@ export class StringSchema<K extends string = "string"> extends NullableCapableSc
   }
 }
 
-export class NumberSchema extends NullableCapableSchema<number> {
+export class NumberSchema extends NullableSchema<number> {
   readonly kind = "number" as const;
 
   constructor() {
@@ -231,7 +227,7 @@ export class NumberSchema extends NullableCapableSchema<number> {
     return this.cloneWith({ maximum: value });
   }
 
-  protected _parse(input: unknown, path: string[]): number {
+  protected _parseValue(input: unknown, path: string[]): number {
     if (typeof input !== "number" || !globalThis.Number.isFinite(input)) {
       return this.fail("Expected a finite number", path);
     }
@@ -264,14 +260,14 @@ export class NumberSchema extends NullableCapableSchema<number> {
   }
 }
 
-export class BooleanSchema extends NullableCapableSchema<boolean> {
+export class BooleanSchema extends NullableSchema<boolean> {
   readonly kind = "boolean" as const;
 
   constructor() {
     super();
   }
 
-  protected _parse(input: unknown, path: string[]): boolean {
+  protected _parseValue(input: unknown, path: string[]): boolean {
     if (typeof input !== "boolean") {
       return this.fail("Expected a boolean", path);
     }
@@ -284,11 +280,17 @@ export class BooleanSchema extends NullableCapableSchema<boolean> {
   }
 }
 
-export type LiteralValue = string | number | boolean | null;
+/**
+ * 字面量只支持 string / number / boolean。
+ *
+ * null 由 `s.null()` 表达；需要「该字面量或 null」时，对字面量调用
+ * `.nullable()`。`literal(null)` 会抛 TypeError。
+ */
+export type LiteralValue = string | number | boolean;
 
 export class LiteralSchema<
   const T extends LiteralValue,
-> extends NullableCapableSchema<T> {
+> extends NullableSchema<T> {
   readonly kind = "literal" as const;
 
   constructor(private readonly expected: T) {
@@ -298,12 +300,15 @@ export class LiteralSchema<
       throw new TypeError("LiteralSchema expected number must be finite");
     }
 
-    if (expected !== null && !["string", "number", "boolean"].includes(typeof expected)) {
-      throw new TypeError("LiteralSchema expected value must be a string, number, boolean, or null");
+    if (expected === null || !["string", "number", "boolean"].includes(typeof expected)) {
+      throw new TypeError(
+        "LiteralSchema expected value must be a string, number, or boolean. " +
+        "Use s.null() for null, or .nullable() to allow null alongside a literal.",
+      );
     }
   }
 
-  protected _parse(input: unknown, path: string[]): T {
+  protected _parseValue(input: unknown, path: string[]): T {
     if (input !== this.expected) {
       return this.fail(
         `Expected literal ${JSON.stringify(this.expected)}`,
@@ -321,7 +326,7 @@ export class LiteralSchema<
   }
 }
 
-export class ArraySchema<T> extends NullableCapableSchema<T[]> {
+export class ArraySchema<T> extends NullableSchema<T[]> {
   readonly kind = "array" as const;
 
   private minimum?: number;
@@ -341,7 +346,7 @@ export class ArraySchema<T> extends NullableCapableSchema<T[]> {
     return this.cloneWith({ maximum: value });
   }
 
-  protected _parse(input: unknown, path: string[]): T[] {
+  protected _parseValue(input: unknown, path: string[]): T[] {
     if (!globalThis.Array.isArray(input)) {
       return this.fail("Expected an array", path);
     }
@@ -403,7 +408,7 @@ type OptionalShapeOutput<S extends ObjectShape> = {
 export class ObjectSchema<
   S extends ObjectShape,
   Strict extends boolean = false,
-> extends NullableCapableSchema<
+> extends NullableSchema<
   Strict extends true ? ShapeOutput<S> : OptionalShapeOutput<S>
 > {
   readonly kind = "object" as const;
@@ -426,7 +431,7 @@ export class ObjectSchema<
     return new ObjectSchema<S, true>(this.shape, true, this.getDescription());
   }
 
-  protected _parse(
+  protected _parseValue(
     input: unknown,
     path: string[],
   ): Strict extends true ? ShapeOutput<S> : OptionalShapeOutput<S> {
@@ -503,7 +508,7 @@ export class ObjectSchema<
   }
 }
 
-export class RecordSchema<T> extends NullableCapableSchema<Record<string, T>> {
+export class RecordSchema<T> extends NullableSchema<Record<string, T>> {
   readonly kind = "record" as const;
 
   private minimum?: number;
@@ -523,7 +528,7 @@ export class RecordSchema<T> extends NullableCapableSchema<Record<string, T>> {
     return this.cloneWith({ maximum: value });
   }
 
-  protected _parse(input: unknown, path: string[]): Record<string, T> {
+  protected _parseValue(input: unknown, path: string[]): Record<string, T> {
     if (
       input === null ||
       typeof input !== "object" ||
@@ -580,23 +585,39 @@ export class RecordSchema<T> extends NullableCapableSchema<Record<string, T>> {
   }
 }
 
+/**
+ * 联合。
+ *
+ * 传入的 member schemas 会被 clone 并 `nullable(false)`——因为「某个
+ * 分支允许 null」这件事在 union 层面没有意义：null 是否允许应通过
+ * `union(...).nullable()` 统一表达。
+ */
 export class UnionSchema<
   const S extends readonly [Schema<unknown>, ...Schema<unknown>[]],
-> extends NullableCapableSchema<SchemaValue<S[number]>> {
+> extends NullableSchema<SchemaValue<S[number]>> {
   readonly kind = "union" as const;
 
-  constructor(private readonly schemas: S) {
+  private readonly options: Schema<unknown>[];
+
+  constructor(schemas: S) {
     super();
 
     if (schemas.length === 0) {
       throw new TypeError("UnionSchema requires at least one schema");
     }
+
+    this.options = schemas.map((schema) => {
+      if (schema instanceof NullableSchema) {
+        return schema.nullable(false);
+      }
+      return schema;
+    });
   }
 
-  protected _parse(input: unknown, path: string[]): SchemaValue<S[number]> {
+  protected _parseValue(input: unknown, path: string[]): SchemaValue<S[number]> {
     const errors: string[] = [];
 
-    for (const schema of this.schemas) {
+    for (const schema of this.options) {
       try {
         return schema.parse(input) as SchemaValue<S[number]>;
       } catch (error) {
@@ -618,7 +639,7 @@ export class UnionSchema<
     return {
       kind: this.kind,
       children: {
-        options: this.schemas.map((schema) => schema.toJSON()),
+        options: this.options.map((schema) => schema.toJSON()),
       },
     };
   }
@@ -626,7 +647,7 @@ export class UnionSchema<
 
 export class TupleSchema<
   const S extends readonly [Schema<unknown>, ...Schema<unknown>[]],
-> extends NullableCapableSchema<SchemaValue<S[number]>[]> {
+> extends NullableSchema<SchemaValue<S[number]>[]> {
   readonly kind = "tuple" as const;
 
   constructor(private readonly schemas: S) {
@@ -636,7 +657,7 @@ export class TupleSchema<
     }
   }
 
-  protected _parse(input: unknown, path: string[]): SchemaValue<S[number]>[] {
+  protected _parseValue(input: unknown, path: string[]): SchemaValue<S[number]>[] {
     if (!Array.isArray(input)) {
       return this.fail("Expected an array", path);
     }
@@ -673,9 +694,15 @@ export class TupleSchema<
   }
 }
 
+/**
+ * 字符串枚举。
+ *
+ * 继承 `NullableSchema`，因此可以 `s.enum([...]).nullable()`；
+ * 它不包含嵌套 schema，所以不需要像 union 那样处理成员 nullability。
+ */
 export class EnumSchema<
   const T extends readonly [string, ...string[]],
-> extends NullableCapableSchema<T[number]> {
+> extends NullableSchema<T[number]> {
   readonly kind = "enum" as const;
 
   private readonly allowedValues: Set<string>;
@@ -685,7 +712,7 @@ export class EnumSchema<
     this.allowedValues = new Set(values);
   }
 
-  protected _parse(input: unknown, path: string[]): T[number] {
+  protected _parseValue(input: unknown, path: string[]): T[number] {
     if (typeof input !== "string" || !this.allowedValues.has(input)) {
       return this.fail(
         `Expected one of: ${this.values.join(", ")}`,
@@ -708,7 +735,8 @@ export class EnumSchema<
  * 校验任意 JSON 值。
  *
  * 不允许 undefined、非有限数字、循环引用等非 JSON 数据。
- * UnknownSchema 不提供 nullable()，因为 null 本身就是合法值。
+ * null 本身就在接受范围内，因此不继承 `NullableSchema`，也不提供
+ * `.nullable()`——那是冗余的。
  */
 export class UnknownSchema extends Schema<JSONValue> {
   readonly kind = "unknown" as const;
@@ -720,6 +748,31 @@ export class UnknownSchema extends Schema<JSONValue> {
   protected _parse(input: unknown, path: string[]): JSONValue {
     assertJSONValue(input, path);
     return input;
+  }
+
+  protected _describe(): SchemaDescription {
+    return { kind: this.kind };
+  }
+}
+
+/**
+ * 精确的 null 值。
+ *
+ * 与 `UnknownSchema` 一样天然表达 null，不需要 `.nullable()`。
+ * 想表达「某类型或 null」用 `.nullable()`；想表达「就是 null」用 `s.null()`。
+ */
+export class NullSchema extends Schema<null> {
+  readonly kind = "null" as const;
+
+  constructor() {
+    super();
+  }
+
+  protected _parse(input: unknown, path: string[]): null {
+    if (input !== null) {
+      return this.fail("Expected null", path);
+    }
+    return null;
   }
 
   protected _describe(): SchemaDescription {
@@ -817,4 +870,5 @@ export const primitives = {
   enum: <const T extends readonly [string, ...string[]]>(values: T) =>
     new EnumSchema(values),
   unknown: () => new UnknownSchema(),
+  null: () => new NullSchema(),
 };

@@ -1,7 +1,7 @@
 import { METHOD_NOT_FOUND, INVALID_PARAMS } from '../errors/codes';
 import { RPCError } from '../errors/RPCError';
 import { InjectableMarker, VoidMarker, StreamMarker, Schema } from '../schema/json';
-import type { RPCDescriptor, RPCHandler, RPCSignature, RPCReturnSlot, RPCParamSlot } from '../types';
+import type { RPCDescriptor, RPCHandler, RPCSignature, RPCParamSlot } from '../types';
 
 export interface IndexedParam {
   schema: Schema<unknown>;

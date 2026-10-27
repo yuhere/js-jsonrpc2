@@ -61,7 +61,7 @@ function convert(desc: SchemaDescription): JSONSchema {
         case 'literal': {
             const value = (desc.constraints as { value: unknown }).value;
             out.const = value;
-            out.type = value === null ? 'null' : typeof value;
+            out.type = typeof value; // string | number | boolean
             break;
         }
         case 'enum': {
@@ -115,24 +115,30 @@ function convert(desc: SchemaDescription): JSONSchema {
             out.anyOf = options.map(convert);
             break;
         }
-        case 'nullable': {
-            const inner = convert((desc.children as { inner: SchemaDescription }).inner);
-            if (typeof inner.type === 'string') {
-                inner.type = [inner.type, 'null'];
-            } else if (Array.isArray(inner.type)) {
-                inner.type = [...inner.type, 'null'];
-            } else {
-                inner.nullable = true;
-            }
-            return inner;
-        }
         case 'unknown': {
             out.type = ['object', 'array', 'string', 'number', 'boolean', 'null'];
+            break;
+        }
+        case 'null': {
+            out.type = 'null';
             break;
         }
         default:
             throw new Error(`Unsupported schema kind for JSON Schema: ${desc.kind}`);
     }
+
+    if (desc.nullable) {
+        if (desc.kind === 'unknown' || desc.kind === 'null') {
+            // unknown 已包含 null；null 本身就是 null。不追加。
+        } else if (typeof out.type === 'string') {
+            out.type = [out.type, 'null'];
+        } else if (Array.isArray(out.type)) {
+            out.type = out.type.includes('null') ? out.type : [...out.type, 'null'];
+        } else {
+            out.nullable = true;
+        }
+    }
+
     return out;
 }
 

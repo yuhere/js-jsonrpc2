@@ -73,28 +73,34 @@ repository.register(
 
 ## 2. Schema 类型体系
 
-采用统一的 `*Schema` 命名，避免与 JavaScript 内置类型冲突。
+| 类名 | 工厂方法 | 基类 | 用途 |
+| --- | --- | --- | --- |
+| `Schema<T>` | — | — | 所有 Schema 的抽象基类（仅 description） |
+| `NullableSchema<T>` | — | `Schema<T \| null>` | 提供 `.nullable(bool)` 的抽象基类 |
+| `StringSchema` | `s.string()` | `NullableSchema` | 字符串 |
+| `NumberSchema` | `s.number()` | `NullableSchema` | 有限数字 |
+| `BooleanSchema` | `s.boolean()` | `NullableSchema` | 布尔值 |
+| `LiteralSchema` | `s.literal(v)` | `NullableSchema` | 字面量（string/number/boolean） |
+| `ArraySchema` | `s.array(schema)` | `NullableSchema` | 数组 |
+| `ObjectSchema` | `s.object(shape)` | `NullableSchema` | 对象 |
+| `RecordSchema` | `s.record(schema)` | `NullableSchema` | 键值映射 |
+| `UnionSchema` | `s.union(schemas)` | `NullableSchema` | 联合类型 |
+| `TupleSchema` | `s.tuple(schemas)` | `NullableSchema` | 元组 |
+| `EnumSchema` | `s.enum(values)` | `NullableSchema` | 字符串枚举 |
+| `UnknownSchema` | `s.unknown()` | `Schema` | 任意合法 JSON 值（已含 null） |
+| `NullSchema` | `s.null()` | `Schema` | 精确的 null |
 
-| 类名                         | 工厂方法               | 用途                               |
-| -------------------------- | ------------------ | -------------------------------- |
-| `Schema<T>`                | —                  | 所有 Schema 的抽象基类                  |
-| `NullableCapableSchema<T>` | —                  | 为普通 JSON Schema 提供 `.nullable()` |
-| `StringSchema`             | `s.string()`       | 字符串                              |
-| `NumberSchema`             | `s.number()`       | 有限数字                             |
-| `BooleanSchema`            | `s.boolean()`      | 布尔值                              |
-| `LiteralSchema`            | `s.literal(value)` | 字面量                              |
-| `ArraySchema`              | `s.array(schema)`  | 数组                               |
-| `ObjectSchema`             | `s.object(shape)`  | 对象                               |
-| `RecordSchema`             | `s.record(schema)` | 键值映射                             |
-| `UnionSchema`              | `s.union(schemas)` | 联合类型                             |
-| `EnumSchema`               | `s.enum(values)`   | 字符串枚举                            |
-| `UnknownSchema`            | `s.unknown()`      | 任意合法 JSON 值                      |
-| `NullableSchema<T>`        | `.nullable()` 的返回值 | 接受原类型或 `null`                    |
-
-另外，RPC 专用控制标记为：
+RPC 专用控制标记：
 
 - `VoidMarker`：表示 RPC 方法没有返回值。
 - `InjectableMarker`：表示参数由服务端注入，而非客户端提供。
+- `StreamMarker`：表示流式返回值。
+
+设计原则：
+
+- `kind` 永远表示值的真实形状（`"string"`、`"object"`…），nullability 只通过 `SchemaDescription.nullable` 表达。
+- `UnknownSchema` / `NullSchema` 天然接受 null，不继承 `NullableSchema`，也不提供 `.nullable()`——对它们调用 `.nullable()` 是冗余的，从 API 上直接不暴露。
+- `UnionSchema` 在构造时会把每个 member schema clone 并 `nullable(false)`：null 是否允许由 union 自己（`.nullable()`）决定，member 上的 nullable 没有意义。
 
 ## 3. JSON 数据规则
 
@@ -113,26 +119,76 @@ repository.register(
 
 它直接继承 `Schema<JSONValue>`，不提供 `.nullable()`，因为 `null` 本身已经在接受范围内。
 
+### `s.literal(value)`
+
+只接受 `string | number | boolean`。null 用 `s.null()` 或 `.nullable()` 表达：
+
+```ts
+s.literal('hello');   // 字面量 'hello'
+s.literal(42);        // 字面量 42
+s.literal(true);      // 字面量 true
+s.literal(null);      // ❌ 运行时抛 TypeError
+s.literal('hello').nullable(); // 'hello' | null
+```
+
+### `s.null()`
+
+`NullSchema` 精确表示 `null`：
+
+```ts
+s.null();      // 仅接受 null
+s.unknown();   // 接受任意 JSON，包括 null
+```
+
 ### `.nullable()`
 
-普通 JSON Schema 默认不接受 `null`，需要显式调用：
+`nullable` 是 `NullableSchema` 基类上的一个不可变布尔标记，表达「该值是否允许为 null」。
+默认 `false`；`.nullable()` / `.nullable(true)` 置为 `true`，`.nullable(false)` 撤销。
 
-```
-s.string();          // string
-s.string().nullable(); // string | null
-s.number().nullable(); // number | null
+```ts
+s.string();                              // string
+s.string().nullable();                   // string | null
+s.string().nullable(true);               // string | null
+s.string().nullable().nullable(false);   // string
+s.number().nullable();                   // number | null
+s.literal('x').nullable();               // 'x' | null
+s.enum(['a', 'b']).nullable();           // 'a' | 'b' | null
 ```
 
-`describe()` 是通用能力，普通 Schema 和 `UnknownSchema` 都支持。
+要点：
+
+- `kind` 永远表示值的真实形状，不会被 nullability 污染。
+- `SchemaDescription.nullable?: boolean` 是 nullability 的唯一真相来源。
+- `UnknownSchema` 和 `NullSchema` 不继承 `NullableSchema`，因此没有 `.nullable()`；`s.unknown().nullable()` 是类型错误。
+
+### `s.union([...])` 与 nullability
+
+`union` 的成员会被 clone 并 `nullable(false)`：
+
+```ts
+s.union([s.string().nullable(), s.number()])
+```
+
+等价于
+
+```ts
+s.union([s.string(), s.number()])
+```
+
+要让整个 union 接受 null，用 `.nullable()`：
+
+```ts
+s.union([s.string(), s.number()]).nullable(); // string | number | null
+```
 
 ### `.min()` 与 `.max()`
 
-| 类型     | 约束对象  | 参数要求      |
-| ------ | ----- | --------- |
-| 字符串    | 字符数   | 非负整数      |
-| 数字     | 数值上下界 | 有限数字，可为负数 |
-| 数组     | 元素数量  | 非负整数      |
-| Record | 对象键数量 | 非负整数      |
+| 类型 | 约束对象 | 参数要求 |
+| --- | --- | --- |
+| 字符串 | 字符数 | 非负整数 |
+| 数字 | 数值上下界 | 有限数字，可为负数 |
+| 数组 | 元素数量 | 非负整数 |
+| Record | 对象键数量 | 非负整数 |
 
 同一约束重复设置时，以最后一次调用为准。例如：
 
@@ -148,13 +204,8 @@ s.string().min(1).min(3); // 最小长度为 3
 - `strict()` 模式：声明的属性必须全部存在，并且拒绝额外属性。
 
 ```
-s.object({
-  name: s.string(),
-});
-
-s.object({
-  name: s.string(),
-}).strict();
+s.object({ name: s.string() });
+s.object({ name: s.string() }).strict();
 ```
 
 注意：这里的 `strict()` 同时影响必需属性和额外属性处理，这是本项目的约定，不应直接等同于 Zod 的标准语义。

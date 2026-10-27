@@ -4,13 +4,9 @@
 
 #####
 
-1. 添加 比如 websocket 等传输层的支持；
-  + websocket，https://www.npmjs.com/package/ws
-  + Standard I/O (stdio)
+1. RPC 远程方法调用的统计功能。
 
+2. creatExpress 中设置是否启用 websocket。
 
-2. 构建一个容易使用的、更现代化的前端；打包到 htdoc 目录下；
-
-
-3. 
+3. bin/jsonrpc2-dome 现在还不好使。
 
