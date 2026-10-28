@@ -66,11 +66,14 @@ function buildInjectables(
 ): Injections {
 
   const injections = typeof factory === 'function'
-    ? factory({
-      request: req,
-      session: (req as Request & { session?: unknown }).session,
-      response: res
-    }, repository)
+    ? {
+      ...factory({
+        request: req,
+        session: (req as Request & { session?: unknown }).session,
+        response: res
+      }, repository),
+      repository
+    }
     : {
       request: req,
       session: (req as Request & { session?: unknown }).session,

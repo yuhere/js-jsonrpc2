@@ -284,10 +284,13 @@ function buildInjectables(
     repository: Repository,
 ): Injections {
     const injections = typeof factory === 'function'
-        ? factory({
-            socket: ws,
-            request: req,
-        }, repository)
+        ? {
+            ...factory({
+                socket: ws,
+                request: req,
+            }, repository),
+            repository
+        }
         : {
             socket: ws,
             request: req,

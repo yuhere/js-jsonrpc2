@@ -267,10 +267,13 @@ function buildInjectables(
   repository: Repository,
 ): Injections {
   const injections = typeof factory === 'function'
-    ? factory({
-      input: process.stdin,
-      output: process.stdout
-    }, repository)
+    ? {
+      ...factory({
+        input: process.stdin,
+        output: process.stdout
+      }, repository),
+      repository
+    }
     : {
       repository,
       input: process.stdin,
