@@ -1,9 +1,9 @@
-import type { Schema, SchemaDescription } from '../schema/json/primitives';
+import type { SchemaDescription } from '../schema/json/primitives';
 import { RPCError } from '../errors/RPCError';
 import { METHOD_NOT_FOUND } from '../errors/codes';
 import { assertAccessible } from './permission';
 import type { Repository } from './Repository';
-import { InjectableMarker } from '../schema/json';
+import { InjectableMarker, VoidMarker, StreamMarker, Schema } from '../schema/json';
 import { RPCVersion } from '../schema/z/protocol';
 import type {
     RPCFailure, RPCSuccess,
@@ -42,69 +42,69 @@ function convert(desc: SchemaDescription): JSONSchema {
 
     switch (desc.kind) {
         case 'string': {
-            out.type = 'string';
-            const c = (desc.constraints ?? {}) as { min?: number; max?: number };
-            if (c.min !== undefined) out.minLength = c.min;
-            if (c.max !== undefined) out.maxLength = c.max;
+        out.type = 'string';
+        const c = (desc.constraints ?? {}) as { min?: number; max?: number };
+        if (c.min !== undefined) out.minLength = c.min;
+        if (c.max !== undefined) out.maxLength = c.max;
             break;
         }
         case 'number': {
-            out.type = 'number';
-            const c = (desc.constraints ?? {}) as { min?: number; max?: number };
-            if (c.min !== undefined) out.minimum = c.min;
-            if (c.max !== undefined) out.maximum = c.max;
+        out.type = 'number';
+        const c = (desc.constraints ?? {}) as { min?: number; max?: number };
+        if (c.min !== undefined) out.minimum = c.min;
+        if (c.max !== undefined) out.maximum = c.max;
             break;
         }
         case 'boolean':
-            out.type = 'boolean';
+        out.type = 'boolean';
             break;
         case 'literal': {
-            const value = (desc.constraints as { value: unknown }).value;
-            out.const = value;
-            out.type = typeof value; // string | number | boolean
+        const value = (desc.constraints as { value: unknown }).value;
+        out.const = value;
+        out.type = typeof value; // string | number | boolean
             break;
         }
         case 'enum': {
-            out.type = 'string';
-            out.enum = (desc.constraints as { values: unknown[] }).values;
+        out.type = 'string';
+        out.enum = (desc.constraints as { values: unknown[] }).values;
             break;
         }
         case 'array': {
-            out.type = 'array';
-            const c = (desc.constraints ?? {}) as { min?: number; max?: number };
-            if (c.min !== undefined) out.minItems = c.min;
-            if (c.max !== undefined) out.maxItems = c.max;
+        out.type = 'array';
+        const c = (desc.constraints ?? {}) as { min?: number; max?: number };
+        if (c.min !== undefined) out.minItems = c.min;
+        if (c.max !== undefined) out.maxItems = c.max;
             out.items = convert((desc.children as { items: SchemaDescription }).items);
             break;
         }
         case 'tuple': {
-            out.type = 'array';
+        out.type = 'array';
             const items = (desc.children as { items: SchemaDescription[] }).items;
-            out.items = items.map(convert);
-            out.minItems = items.length;
-            out.maxItems = items.length;
+        out.items = items.map(convert);
+        out.minItems = items.length;
+        out.maxItems = items.length;
             break;
         }
         case 'object': {
-            out.type = 'object';
+        out.type = 'object';
             const strict = Boolean((desc.constraints as { strict?: boolean }).strict);
             const props = (desc.children as { properties: Record<string, SchemaDescription> })
                 .properties;
-            out.properties = {};
+        out.properties = {};
             for (const [k, v] of Object.entries(props)) out.properties[k] = convert(v);
-            if (strict) {
+        if (strict) {
                 out.required = Object.keys(props);
-                out.additionalProperties = false;
-            } else {
-                out.additionalProperties = true;
-            }
+            out.additionalProperties = false;
+        } else {
+            out.additionalProperties = true;
+        }
             break;
         }
         case 'record': {
-            out.type = 'object';
-            const c = (desc.constraints ?? {}) as { min?: number; max?: number };
-            if (c.min !== undefined) out.minProperties = c.min;
-            if (c.max !== undefined) out.maxProperties = c.max;
+        out.type = 'object';
+        const c = (desc.constraints ?? {}) as { min?: number; max?: number };
+        if (c.min !== undefined) out.minProperties = c.min;
+        if (c.max !== undefined) out.maxProperties = c.max;
             out.additionalProperties = convert(
                 (desc.children as { values: SchemaDescription }).values,
             );
@@ -112,11 +112,11 @@ function convert(desc: SchemaDescription): JSONSchema {
         }
         case 'union': {
             const options = (desc.children as { options: SchemaDescription[] }).options;
-            out.anyOf = options.map(convert);
+        out.anyOf = options.map(convert);
             break;
         }
         case 'unknown': {
-            out.type = ['object', 'array', 'string', 'number', 'boolean', 'null'];
+        out.type = ['object', 'array', 'string', 'number', 'boolean', 'null'];
             break;
         }
         case 'null': {
@@ -140,6 +140,89 @@ function convert(desc: SchemaDescription): JSONSchema {
     }
 
     return out;
+}
+
+// ─────────────────────────────────────────────────────────────
+// 返回值的人类可读描述（拼进 function.description）
+// ─────────────────────────────────────────────────────────────
+
+function formatConstraints(constraints?: Record<string, unknown>): string {
+    if (!constraints) return '';
+    const parts = Object.entries(constraints)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => `${k}=${JSON.stringify(v)}`);
+    return parts.length > 0 ? ` { ${parts.join(', ')} }` : '';
+}
+
+/**
+ * 把 SchemaDescription 渲染成一行/多行文本，供 LLM 阅读。
+ * 与 WebUI `docGen.ts` 的 `renderSchema` 风格一致：
+ * - 读 `schema.nullable`（不再有 kind === 'nullable'）
+ * - 容器类型递归
+ * - 未知 kind 原样输出
+ */
+function renderSchema(schema: SchemaDescription, indent = 0): string[] {
+    const pad = '  '.repeat(indent);
+    const lines: string[] = [];
+
+    let head = `${pad}- ${schema.kind}`;
+    if (schema.nullable) head += ' (nullable)';
+    if (schema.description) head += ` — ${schema.description}`;
+    const c = formatConstraints(schema.constraints);
+    if (c) head += ` \`${c}\``;
+    lines.push(head);
+
+    const ch = schema.children ?? {};
+    const pushChild = (label: string, child: SchemaDescription) => {
+        const sub = renderSchema(child, indent + 1);
+        if (sub.length) {
+            sub[0] = `${'  '.repeat(indent + 1)}- **${label}**: ${sub[0]!.trim().replace(/^- /, '')}`;
+            lines.push(...sub);
+        }
+    };
+
+    if (isSchema(ch.inner)) pushChild('inner', ch.inner);
+    if (Array.isArray(ch.items)) {
+        (ch.items as unknown[]).forEach((it, i) => {
+            if (isSchema(it)) pushChild(`[${i}]`, it);
+        });
+    } else if (isSchema(ch.items)) {
+        pushChild('items', ch.items);
+    }
+    if (Array.isArray(ch.options)) {
+        (ch.options as unknown[]).forEach((opt, i) => {
+            if (isSchema(opt)) pushChild(`option[${i}]`, opt);
+        });
+    }
+    if (ch.properties && typeof ch.properties === 'object') {
+        for (const [k, v] of Object.entries(ch.properties)) {
+            if (isSchema(v)) pushChild(k, v);
+        }
+    }
+    if (isSchema(ch.values)) pushChild('values', ch.values);
+
+    return lines;
+}
+
+function isSchema(v: unknown): v is SchemaDescription {
+    return !!v && typeof v === 'object' && typeof (v as SchemaDescription).kind === 'string';
+}
+
+/** 渲染返回值槽位（Schema / VoidMarker / StreamMarker）。 */
+function renderReturnSlot(slot: unknown): string {
+    if (slot instanceof VoidMarker) return 'void';
+    if (slot instanceof StreamMarker) {
+        const inner = renderSchema(slot.inner.toJSON(), 0)
+            .map((l) => l.replace(/^- /, ''))
+            .join('\n');
+        return `stream of:\n${inner}`;
+    }
+    if (slot instanceof Schema) {
+        return renderSchema(slot.toJSON(), 0)
+            .map((l) => l.replace(/^- /, ''))
+            .join('\n');
+    }
+    return 'unknown';
 }
 
 export async function listLlmTools(
@@ -182,12 +265,16 @@ export async function listLlmTools(
             paramIndex++;
         }
 
-        // description：document + 流式说明 + 无参说明
+        // description：document + 返回值 + 流式说明 + 无参说明
         const parts: string[] = [];
         const doc = descriptor.document;
         const docText =
             typeof doc === 'function' ? ((await doc(descriptor as never)) ?? '') : (doc ?? '');
         if (docText) parts.push(docText);
+
+        const returnText = renderReturnSlot(descriptor.signature[0]);
+        parts.push(`Returns:\n${returnText}\n\n`);
+
         if (isStream) {
             parts.push(
                 '(Returns a stream of results; the host application consumes it incrementally and the LLM only receives the aggregated result.)',

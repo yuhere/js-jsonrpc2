@@ -41,7 +41,11 @@ export function registerSystemMethods(repository: Repository): void {
         'It returns an array of possible signatures for this method.\n' +
         'A signature is an array of types.\n' +
         'The first of these types is the return type of the method, the rest are parameters.\n',
-      signature: [s.array(s.unknown()), s.string(), s.injectable('repository'), s.injectable('injections')],
+      signature: [
+        s.array(s.object({   // 返回值的完整类型需要在运行时返回，`s` 无法完整描述运行时结果。
+          kind: s.enum(["string", "number", "boolean", "literal", "enum", "array", "tuple", "object", "record", "union", "unknown", "null", "stream", "void"]).describe('Schema类型'),
+        })),
+        s.string(), s.injectable('repository'), s.injectable('injections')],
     },
     async function systemMethodSignature(namespace: string, repository: Repository, injections: Injections) {
       const descriptor = repository.get(namespace);
@@ -77,10 +81,8 @@ export function registerSystemMethods(repository: Repository): void {
     {
       namespace: 'system.metrics',
       document:
-        'This method takes one parameter, the name of a method implemented by the RPC server.\n\n' +
-        'It returns a documentation string describing the use of that method.\n' +
-        'If no such string is available, an empty string is returned.\n' +
-        'The documentation string may contain HTML markup.\n',
+        'Return the current RPC metrics snapshot, if the configured metrics implementation supports it.\n\n' +
+        'Returns `null` when the active `RPCMetrics` implementation does not expose `snapshot()`.',
       signature: [s.unknown(), s.injectable('repository')],
     },
     async function systemMetrics(repository: Repository) {
@@ -91,6 +93,7 @@ export function registerSystemMethods(repository: Repository): void {
       if (hasSnapshot(metrics)) {
         return metrics.snapshot();
       }
+      return null;
     },
   );
 
@@ -112,6 +115,8 @@ export function registerSystemMethods(repository: Repository): void {
               name: s.string(),
               description: s.string(),
               parameters: s.record(s.unknown()),
+              required: s.array(s.string()),
+              additionalProperties: s.boolean()
             }),
           }),
         ),
@@ -121,7 +126,7 @@ export function registerSystemMethods(repository: Repository): void {
           includeStreaming: s.boolean().describe('Include stream-returning methods (default false)'),
           namePrefix: s.string().describe('Prefix added to every tool name'),
           prefix: s.string().describe('Only include methods whose namespace starts with this'),
-        }).describe('Options').nullable()
+        }).strict().describe('Options').nullable()
       ],
     },
     async function generateLlmTools(repository: Repository, injections: Injections, rawOptions?: unknown): Promise<LlmTools> {
