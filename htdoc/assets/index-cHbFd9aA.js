@@ -7562,7 +7562,7 @@ async function readLine(reader, decoder, state) {
 function isStreamFrame$1(v) {
 	return !!v && typeof v === "object" && typeof v.done === "boolean";
 }
-function createHttpRpc(options = {}) {
+function createHttpRPC(options = {}) {
 	const { endpoint = "", headers = {}, fetchImpl = fetch } = options;
 	function call(method, ...params) {
 		const body = {
@@ -7576,7 +7576,7 @@ function createHttpRpc(options = {}) {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					"Accept": "application/x-ndjson",
+					"Accept": "application/json, application/x-ndjson",
 					...headers
 				},
 				body: JSON.stringify(body)
@@ -7652,7 +7652,7 @@ function deriveWsEndpoint() {
 function isStreamFrame(v) {
 	return !!v && typeof v === "object" && typeof v.done === "boolean";
 }
-function createWsRpc(options = {}) {
+function createWsRPC(options = {}) {
 	const { endpoint = deriveWsEndpoint(), connectTimeoutMs = 5e3, callTimeoutMs = 15e3 } = options;
 	const pending = /* @__PURE__ */ new Map();
 	const streams = /* @__PURE__ */ new Map();
@@ -7688,6 +7688,7 @@ function createWsRpc(options = {}) {
 			}
 			const list = Array.isArray(data) ? data : [data];
 			for (const msg of list) {
+				if (!msg || typeof msg !== "object") continue;
 				if (msg.id == null) continue;
 				const fw = firstWaiters.get(msg.id);
 				if (fw) {
@@ -7920,13 +7921,13 @@ var RPCError = class extends Error {
 function isStreamResult(v) {
 	return !!v && typeof v === "object" && typeof v[Symbol.asyncIterator] === "function";
 }
-function createRpc(options) {
-	if (options.transport === "ws") return createWsRpc({
+function createRPC(options) {
+	if (options.transport === "ws") return createWsRPC({
 		endpoint: options.endpoint,
 		connectTimeoutMs: options.connectTimeoutMs,
 		callTimeoutMs: options.callTimeoutMs
 	});
-	return createHttpRpc({
+	return createHttpRPC({
 		endpoint: options.endpoint,
 		headers: options.headers,
 		fetchImpl: options.fetchImpl
@@ -9149,13 +9150,20 @@ function Constraints({ schema }) {
 }
 //#endregion
 //#region webui/src/components/TestPanel.tsx
-var COPY_OPTIONS = [{
-	value: "curl",
-	label: "复制 curl"
-}, {
-	value: "fetch",
-	label: "复制 fetch"
-}];
+var COPY_OPTIONS = [
+	{
+		value: "curl",
+		label: "复制 curl (bash)"
+	},
+	{
+		value: "curl-cmd",
+		label: "复制 curl (cmd)"
+	},
+	{
+		value: "fetch",
+		label: "复制 fetch"
+	}
+];
 /** 格式化耗时：<1s 用 ms，否则用 s */
 function formatElapsed(ms) {
 	if (ms < 1e3) return `${ms.toFixed(0)} ms`;
@@ -9252,7 +9260,7 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 				id: 1
 			};
 			const url = absoluteEndpoint(endpoint);
-			code = kind === "curl" ? buildCurl(url, body) : buildFetch(url, body);
+			code = kind === "curl" ? buildCurl(url, body) : kind === "curl-cmd" ? buildCurlCmd(url, body) : buildFetch(url, body);
 		} catch (e) {
 			setCopyError(e instanceof Error ? e.message : String(e));
 			return;
@@ -9386,6 +9394,7 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 		]
 	});
 }
+/** bash / POSIX sh：单引号包裹，内部单引号用 '\'' 转义；反斜杠续行。 */
 function buildCurl(url, body) {
 	const quotedBody = `'${JSON.stringify(body, null, 2).replace(/'/g, `'\\''`)}'`;
 	return [
@@ -9393,6 +9402,23 @@ function buildCurl(url, body) {
 		`  -H 'Content-Type: application/json'`,
 		`  -d ${quotedBody}`
 	].join(" \\\n");
+}
+/**
+* Windows CMD：双引号包裹。
+* - 双引号 " 用 \" 转义（curl.exe 在 cmd 下按 C 运行时规则解析）
+* - % 用 %% 转义（避免被 cmd 当作变量展开）
+* - 换行用 ^ 续行
+* - 其余字符原样保留
+*/
+function buildCurlCmd(url, body) {
+	const bodyText = JSON.stringify(body);
+	const escapeCmdDoubleQuoted = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/%/g, "%%");
+	const quotedBody = `"${escapeCmdDoubleQuoted(bodyText)}"`;
+	return [
+		`curl -X POST ${`"${escapeCmdDoubleQuoted(url)}"`} ^`,
+		`  -H "Content-Type: application/json" ^`,
+		`  -d ${quotedBody}`
+	].join("\n");
 }
 function buildFetch(url, body) {
 	const indented = JSON.stringify(body, null, 2).split("\n").map((line, i) => i === 0 ? line : "    " + line).join("\n");
@@ -10001,7 +10027,7 @@ function App() {
 	const [generatingDocs, setGeneratingDocs] = (0, import_react.useState)(false);
 	const [view, setView] = (0, import_react.useState)("methods");
 	const [methodFilter, setMethodFilter] = (0, import_react.useState)("");
-	const rpc = (0, import_react.useMemo)(() => createRpc({
+	const rpc = (0, import_react.useMemo)(() => createRPC({
 		transport,
 		endpoint: ENDPOINT
 	}), [transport]);
@@ -10155,4 +10181,4 @@ function App() {
 import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }));
 //#endregion
 
-//# sourceMappingURL=index-Cr0Jnrgb.js.map
+//# sourceMappingURL=index-cHbFd9aA.js.map

@@ -1,8 +1,6 @@
 import type { RPCResponse } from './types';
 import {
     RPCError,
-    isStreamResult,
-    type CallResult,
     type RPCClient,
 } from './rpc';
 
@@ -94,6 +92,7 @@ export function createWsRPC(options: WsRPCOptions = {}): RPCClient {
             }
             const list = Array.isArray(data) ? data : [data];
             for (const msg of list) {
+                if (!msg || typeof msg !== 'object') continue;
                 if (msg.id == null) continue;
 
                 // 1) 首帧等待者
@@ -184,7 +183,9 @@ export function createWsRPC(options: WsRPCOptions = {}): RPCClient {
         return openPromise;
     }
 
-    function call<T = unknown>(method: string, ...params: unknown[]): CallResult<T> {
+    function call<T = unknown>(method: string, ...params: unknown[]): Promise<T>;
+    function call<T = unknown>(method: string, ...params: unknown[]): Promise<AsyncGenerator<T, void, unknown>>;
+    function call<T = unknown>(method: string, ...params: unknown[]): Promise<T | AsyncGenerator<T, void, unknown>> {
         return (async () => {
             await ensureOpen();
             const ws = socket;

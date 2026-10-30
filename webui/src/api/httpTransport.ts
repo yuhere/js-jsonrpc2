@@ -1,7 +1,6 @@
 import type { RPCResponse } from './types';
 import {
     RPCError,
-    type CallResult,
     type RPCClient,
 } from './rpc';
 
@@ -56,7 +55,9 @@ export function createHttpRPC(options: HttpRPCOptions = {}): RPCClient {
         fetchImpl = fetch,
     } = options;
 
-    function call<T = unknown>(method: string, ...params: unknown[]): CallResult<T> {
+    function call<T = unknown>(method: string, ...params: unknown[]): Promise<T>;
+    function call<T = unknown>(method: string, ...params: unknown[]): Promise<AsyncGenerator<T, void, unknown>>;
+    function call<T = unknown>(method: string, ...params: unknown[]): Promise<T | AsyncGenerator<T, void, unknown>> {
         const id = ++idCounter;
         const body = { jsonrpc: '2.0', method, params, id };
 
@@ -65,7 +66,7 @@ export function createHttpRPC(options: HttpRPCOptions = {}): RPCClient {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/x-ndjson',
+                    'Accept': 'application/json, application/x-ndjson',
                     ...headers,
                 },
                 body: JSON.stringify(body),

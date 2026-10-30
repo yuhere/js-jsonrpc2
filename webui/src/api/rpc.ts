@@ -4,11 +4,12 @@ import { createWsRPC, type WsRPCOptions } from './wsTransport';
 
 export type TransportKind = 'http' | 'ws';
 
+// export type CallResult<T> = Promise<T> | AsyncGenerator<T, void, unknown>;
 export type CallResult<T> = Promise<T> | AsyncGenerator<T, void, unknown>;
 
 export interface RPCClient {
-  call<T = unknown>(method: string, ...params: unknown[]): CallResult<T>;
-  close(): void;
+    call<T = unknown>(method: string, ...params: unknown[]): Promise<T> & AsyncGenerator<T, void, unknown>;
+    close(): void;
 }
 
 export interface RPCOptions {
