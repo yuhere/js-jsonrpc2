@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { RPCClient } from '../api/rpc';
+import type { RPCClient } from '../client';
 import type { SchemaDescription } from '../api/schema';
 
 export interface MethodDetail {

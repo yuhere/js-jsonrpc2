@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { RPCClient } from '../api/rpc';
+import type { RPCClient } from '../client';
 import {
     fetchMetrics,
     type MetricsSnapshot,

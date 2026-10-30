@@ -4,12 +4,12 @@ import { createWsRPC, type WsRPCOptions } from './wsTransport';
 
 export type TransportKind = 'http' | 'ws';
 
-// export type CallResult<T> = Promise<T> | AsyncGenerator<T, void, unknown>;
+/** 普通调用返回 Promise<T>；流式调用返回 AsyncGenerator<T>。 */
 export type CallResult<T> = Promise<T> | AsyncGenerator<T, void, unknown>;
 
 export interface RPCClient {
-    call<T = unknown>(method: string, ...params: unknown[]): Promise<T> & AsyncGenerator<T, void, unknown>;
-    close(): void;
+  call<T = unknown>(method: string, ...params: unknown[]): Promise<CallResult<T>>;
+  close(): void;
 }
 
 export interface RPCOptions {
@@ -31,7 +31,7 @@ export class RPCError extends Error {
   get data(): unknown { return this.payload.data; }
 }
 
-export function isStreamResult<T>(v: CallResult<T>): v is AsyncGenerator<T, void, unknown> {
+export function isStreamResult<T>(v: unknown): v is AsyncGenerator<T, void, unknown> {
   return (
     !!v &&
     typeof v === 'object' &&

@@ -7537,9 +7537,7 @@ var require_client = /* @__PURE__ */ __commonJSMin(((exports) => {
 	exports.hydrateRoot = m.hydrateRoot;
 }));
 //#endregion
-//#region webui/src/api/httpTransport.ts
-var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
-var import_client = /* @__PURE__ */ __toESM(require_client(), 1);
+//#region webui/src/client/httpTransport.ts
 var idCounter$1 = 0;
 async function readLine(reader, decoder, state) {
 	while (true) {
@@ -7643,7 +7641,7 @@ function absoluteEndpoint(endpoint) {
 	}
 }
 //#endregion
-//#region webui/src/api/wsTransport.ts
+//#region webui/src/client/wsTransport.ts
 var idCounter = 0;
 function deriveWsEndpoint() {
 	const loc = window.location;
@@ -7903,7 +7901,7 @@ function _defineProperty(e, r, t) {
 	}) : e[r] = t, e;
 }
 //#endregion
-//#region webui/src/api/rpc.ts
+//#region webui/src/client/rpc.ts
 var RPCError = class extends Error {
 	constructor(payload) {
 		super(payload.message);
@@ -7935,6 +7933,8 @@ function createRPC(options) {
 }
 //#endregion
 //#region webui/src/hooks/useMethods.ts
+var import_client = /* @__PURE__ */ __toESM(require_client(), 1);
+var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
 function useMethods(rpc) {
 	const [methods, setMethods] = (0, import_react.useState)([]);
 	const [loading, setLoading] = (0, import_react.useState)(false);
@@ -8012,6 +8012,24 @@ function useMethodDetail(rpc, method) {
 		};
 	}, [rpc, method]);
 	return detail;
+}
+//#endregion
+//#region webui/src/hooks/useDebouncedValue.ts
+/**
+* 返回 `value` 的防抖版本：`value` 停止变化 `delayMs` 毫秒后才更新返回值。
+* 初始值立即生效（首次渲染不会延迟）。
+*/
+function useDebouncedValue(value, delayMs = 250) {
+	const [debounced, setDebounced] = (0, import_react.useState)(value);
+	(0, import_react.useEffect)(() => {
+		if (delayMs <= 0) {
+			setDebounced(value);
+			return;
+		}
+		const t = setTimeout(() => setDebounced(value), delayMs);
+		return () => clearTimeout(t);
+	}, [value, delayMs]);
+	return debounced;
 }
 //#endregion
 //#region webui/src/api/metrics.ts
@@ -9834,58 +9852,87 @@ function StreamTable({ rows }) {
 	});
 }
 //#endregion
-//#region webui/src/api/glob.ts
-function globToRegExp(glob) {
-	let re = "^";
-	for (let i = 0; i < glob.length; i++) {
-		const ch = glob[i];
-		if (ch === "*") {
-			while (i + 1 < glob.length && glob[i + 1] === "*") i++;
-			re += ".*";
-		} else if (ch === "?") re += ".";
-		else if ("\\^$+{}()|[]".includes(ch)) re += "\\" + ch;
-		else re += ch;
-	}
-	re += "$";
-	return new RegExp(re);
+//#region webui/src/components/Footer.tsx
+var NPM_URL = "https://www.npmjs.com/package/@yuhere/js-jsonrpc2/";
+var GITHUB_URL = "https://github.com/yuhere/js-jsonrpc2";
+function Footer() {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("footer", {
+		className: "footer",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+			className: "footer-version",
+			title: "当前构建版本",
+			children: ["v", "2.1.12"]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "footer-links",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+				className: "npm-link",
+				href: NPM_URL,
+				target: "_blank",
+				rel: "noopener noreferrer",
+				title: "在 npm 上查看 @yuhere/js-jsonrpc2",
+				"aria-label": "npm package",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+					viewBox: "0 0 18 7",
+					width: "36",
+					height: "14",
+					role: "img",
+					"aria-hidden": "true",
+					focusable: "false",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", {
+						fill: "#CB3837",
+						d: "M0 0h18v7H9v-1.5H7.5V7H0z"
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", {
+						fill: "#fff",
+						d: "M1.5 1.5h3v4h-1v-3h-1v3h-1zm4 0h3v4h-1v-3h-1v3h-1zm4 0h4v4h-1v-3h-1v3h-1v-3h-1z"
+					})]
+				})
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+				className: "github-link",
+				href: GITHUB_URL,
+				target: "_blank",
+				rel: "noopener noreferrer",
+				title: "在 GitHub 上查看 yuhere/js-jsonrpc2",
+				"aria-label": "GitHub repository",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("svg", {
+					viewBox: "0 0 16 16",
+					width: "16",
+					height: "16",
+					role: "img",
+					"aria-hidden": "true",
+					focusable: "false",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", {
+						fill: "currentColor",
+						d: "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+					})
+				})
+			})]
+		})]
+	});
 }
-function compileGlobFilter(input) {
+//#endregion
+//#region webui/src/utils/fuzzy.ts
+function compileFuzzyQuery(input) {
 	const raw = input ?? "";
-	const trimmed = raw.trim();
-	if (trimmed.length === 0) return {
-		includes: [],
-		excludes: [],
-		raw,
-		passthrough: true
-	};
-	const includes = [];
-	const excludes = [];
-	for (const part of trimmed.split(",")) {
-		const pat = part.trim();
-		if (pat.length === 0) continue;
-		if (pat.startsWith("!")) {
-			const body = pat.slice(1).trim();
-			if (body.length > 0) excludes.push(globToRegExp(body));
-		} else includes.push(globToRegExp(pat));
-	}
+	const terms = raw.trim().toLowerCase().split(/\s+/).filter((t) => t.length > 0);
 	return {
-		includes,
-		excludes,
+		terms,
 		raw,
-		passthrough: false
+		passthrough: terms.length === 0
 	};
 }
-function matchMethod(filter, method) {
-	if (filter.passthrough) return true;
-	if (filter.excludes.some((re) => re.test(method))) return false;
-	if (filter.includes.length === 0) return true;
-	return filter.includes.some((re) => re.test(method));
+function matchFuzzy(query, method) {
+	if (query.passthrough) return true;
+	const target = method.toLowerCase();
+	return query.terms.every((t) => target.includes(t));
 }
-/** 便捷：直接对 MetricsSnapshot 的 methods 做过滤，返回浅拷贝。 */
-function filterSnapshotMethods(filter, methods) {
-	if (filter.passthrough) return methods;
+function filterFuzzyMethods(query, methods) {
+	if (query.passthrough) return methods;
+	return methods.filter((m) => matchFuzzy(query, m));
+}
+function filterFuzzySnapshotMethods(query, methods) {
+	if (query.passthrough) return methods;
 	const out = {};
-	for (const [method, stats] of Object.entries(methods)) if (matchMethod(filter, method)) out[method] = stats;
+	for (const [method, stats] of Object.entries(methods)) if (matchFuzzy(query, method)) out[method] = stats;
 	return out;
 }
 //#endregion
@@ -10026,7 +10073,10 @@ function App() {
 	const [selected, setSelected] = (0, import_react.useState)("");
 	const [generatingDocs, setGeneratingDocs] = (0, import_react.useState)(false);
 	const [view, setView] = (0, import_react.useState)("methods");
-	const [methodFilter, setMethodFilter] = (0, import_react.useState)("");
+	const [methodSearch, setMethodSearch] = (0, import_react.useState)("");
+	const [metricsSearch, setMetricsSearch] = (0, import_react.useState)("");
+	const debouncedMethodSearch = useDebouncedValue(methodSearch, 250);
+	const debouncedMetricsSearch = useDebouncedValue(metricsSearch, 250);
 	const rpc = (0, import_react.useMemo)(() => createRPC({
 		transport,
 		endpoint: ENDPOINT
@@ -10035,15 +10085,17 @@ function App() {
 	const { methods, loading, error, refresh } = useMethods(rpc);
 	const detail = useMethodDetail(rpc, selected);
 	const metrics = useMetrics(rpc, view === "metrics");
-	const compiledFilter = (0, import_react.useMemo)(() => compileGlobFilter(methodFilter), [methodFilter]);
-	const filteredSnapshot = (0, import_react.useMemo)(() => {
+	const methodQuery = (0, import_react.useMemo)(() => compileFuzzyQuery(debouncedMethodSearch), [debouncedMethodSearch]);
+	const metricsQuery = (0, import_react.useMemo)(() => compileFuzzyQuery(debouncedMetricsSearch), [debouncedMetricsSearch]);
+	const filteredMethods = (0, import_react.useMemo)(() => filterFuzzyMethods(methodQuery, methods), [methodQuery, methods]);
+	const filteredMetrics = (0, import_react.useMemo)(() => {
 		if (!metrics.snapshot) return void 0;
-		if (compiledFilter.passthrough) return metrics.snapshot;
+		if (metricsQuery.passthrough) return metrics.snapshot;
 		return {
 			...metrics.snapshot,
-			methods: filterSnapshotMethods(compiledFilter, metrics.snapshot.methods)
+			methods: filterFuzzySnapshotMethods(metricsQuery, metrics.snapshot.methods)
 		};
-	}, [metrics.snapshot, compiledFilter]);
+	}, [metrics.snapshot, metricsQuery]);
 	const generateDocs = (0, import_react.useCallback)(async () => {
 		if (methods.length === 0) {
 			alert("方法列表为空，请先刷新方法列表。");
@@ -10061,119 +10113,128 @@ function App() {
 	}, [rpc, methods]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "app",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Toolbar, {
-			transport,
-			onTransportChange: setTransport,
-			onRefresh: refresh,
-			loading,
-			error,
-			onGenerateDocs: generateDocs,
-			generatingDocs
-		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
-			className: "sidebar",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "view-switch segmented",
-				role: "group",
-				"aria-label": "视图",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-					type: "button",
-					className: view === "methods" ? "active" : "",
-					onClick: () => setView("methods"),
-					children: "Methods"
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-					type: "button",
-					className: view === "metrics" ? "active" : "",
-					onClick: () => setView("metrics"),
-					children: "Metrics"
-				})]
-			}), view === "methods" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Methods" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MethodTree, {
-				methods,
-				selected,
-				onSelect: setSelected
-			})] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "metrics-sidebar",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Metrics" }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-						className: "hint",
-						style: { margin: "0 0 8px" },
-						children: "📊 服务端 RPC 调用统计。"
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
-						className: "metrics-filter",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-							className: "metrics-filter-label",
-							children: "Filter"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-							className: "sf-input",
-							type: "text",
-							placeholder: "user.*, !system.*",
-							value: methodFilter,
-							onChange: (e) => setMethodFilter(e.target.value),
-							spellCheck: false
-						})]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-						className: "hint metrics-filter-help",
-						children: [
-							"支持 ",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "*" }),
-							" / ",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "?" }),
-							" / ",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "!" }),
-							"，多个模式用 ",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "," }),
-							" 分隔。",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("br", {}),
-							"例：",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "user.*" }),
-							"、",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "*.get" }),
-							"、",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "!system.*" }),
-							"、",
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "user.*,!user.secret" })
-						]
-					}),
-					metrics.snapshot && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-						className: "hint metrics-filter-stat",
-						children: [
-							"匹配 ",
-							Object.keys(filteredSnapshot?.methods ?? {}).length,
-							" /",
-							" ",
-							Object.keys(metrics.snapshot.methods).length,
-							" 个方法"
-						]
-					})
-				]
-			})]
-		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-			className: "content",
-			children: view === "methods" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MethodDetail, {
-				method: selected,
-				detail
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TestPanel, {
-				method: selected,
-				detail,
-				rpc,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Toolbar, {
 				transport,
-				endpoint: ENDPOINT
-			})] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricsPanel, {
-				snapshot: filteredSnapshot,
-				previous: metrics.previous,
-				fetchedAt: metrics.fetchedAt,
-				loading: metrics.loading,
-				error: metrics.error,
-				available: metrics.available,
-				onRefresh: () => void metrics.refresh(),
-				autoRefresh: metrics.autoRefresh,
-				onAutoRefreshChange: metrics.setAutoRefresh,
-				intervalMs: metrics.intervalMs,
-				onIntervalChange: metrics.setIntervalMs
-			})
-		})] })]
+				onTransportChange: setTransport,
+				onRefresh: refresh,
+				loading,
+				error,
+				onGenerateDocs: generateDocs,
+				generatingDocs
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
+				className: "sidebar",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "view-switch segmented",
+					role: "group",
+					"aria-label": "视图",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						type: "button",
+						className: view === "methods" ? "active" : "",
+						onClick: () => setView("methods"),
+						children: "Methods"
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						type: "button",
+						className: view === "metrics" ? "active" : "",
+						onClick: () => setView("metrics"),
+						children: "Metrics"
+					})]
+				}), view === "methods" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "metrics-sidebar",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Methods" }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+							className: "metrics-filter",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "metrics-filter-label",
+								children: "Search"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								className: "sf-input",
+								type: "text",
+								placeholder: "输入关键词，空格分隔",
+								value: methodSearch,
+								onChange: (e) => setMethodSearch(e.target.value),
+								spellCheck: false
+							})]
+						}),
+						!methodQuery.passthrough && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+							className: "hint metrics-filter-stat",
+							children: [
+								"匹配 ",
+								filteredMethods.length,
+								" / ",
+								methods.length,
+								" 个方法"
+							]
+						}),
+						filteredMethods.length === 0 && methods.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "empty",
+							children: "没有匹配的方法。"
+						}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MethodTree, {
+							methods: filteredMethods,
+							selected,
+							onSelect: setSelected
+						})
+					]
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "metrics-sidebar",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Metrics" }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+							className: "metrics-filter",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "metrics-filter-label",
+								children: "Search"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								className: "sf-input",
+								type: "text",
+								placeholder: "输入关键词，空格分隔",
+								value: metricsSearch,
+								onChange: (e) => setMetricsSearch(e.target.value),
+								spellCheck: false
+							})]
+						}),
+						metrics.snapshot && !metricsQuery.passthrough && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+							className: "hint metrics-filter-stat",
+							children: [
+								"匹配 ",
+								Object.keys(filteredMetrics?.methods ?? {}).length,
+								" /",
+								" ",
+								Object.keys(metrics.snapshot.methods).length,
+								" 个方法"
+							]
+						})
+					]
+				})]
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "content",
+				children: view === "methods" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MethodDetail, {
+					method: selected,
+					detail
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TestPanel, {
+					method: selected,
+					detail,
+					rpc,
+					transport,
+					endpoint: ENDPOINT
+				})] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricsPanel, {
+					snapshot: filteredMetrics,
+					previous: metrics.previous,
+					fetchedAt: metrics.fetchedAt,
+					loading: metrics.loading,
+					error: metrics.error,
+					available: metrics.available,
+					onRefresh: () => void metrics.refresh(),
+					autoRefresh: metrics.autoRefresh,
+					onAutoRefreshChange: metrics.setAutoRefresh,
+					intervalMs: metrics.intervalMs,
+					onIntervalChange: metrics.setIntervalMs
+				})
+			})] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Footer, {})
+		]
 	});
 }
 //#endregion
@@ -10181,4 +10242,4 @@ function App() {
 import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }));
 //#endregion
 
-//# sourceMappingURL=index-cHbFd9aA.js.map
+//# sourceMappingURL=index-vDCgC9ya.js.map

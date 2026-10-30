@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createRPC, type TransportKind } from './api/rpc';
+import { createRPC, type TransportKind } from './client';
 import { useMethods } from './hooks/useMethods';
 import { useMethodDetail } from './hooks/useMethodDetail';
+import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { useMetrics } from './hooks/useMetrics';
 import { Toolbar } from './components/Toolbar';
 import { MethodTree } from './components/MethodTree';
 import { MethodDetail } from './components/MethodDetail';
 import { TestPanel } from './components/TestPanel';
 import { MetricsPanel } from './components/MetricsPanel';
-import { compileGlobFilter, filterSnapshotMethods } from './api/glob';
+import { Footer } from './components/Footer';
+import { compileFuzzyQuery, filterFuzzyMethods, filterFuzzySnapshotMethods } from './utils/fuzzy';
 import type { MetricsSnapshot } from './api/metrics';
 import {
     collectApiDoc,
@@ -24,7 +26,14 @@ export default function App() {
     const [selected, setSelected] = useState('');
     const [generatingDocs, setGeneratingDocs] = useState(false);
     const [view, setView] = useState<View>('methods');
-    const [methodFilter, setMethodFilter] = useState('');
+    const [methodSearch, setMethodSearch] = useState('');
+    const [metricsSearch, setMetricsSearch] = useState('');
+
+    const debouncedMethodSearch = useDebouncedValue(methodSearch, 250);
+    const debouncedMetricsSearch = useDebouncedValue(metricsSearch, 250);
+    const methodPending = methodSearch !== debouncedMethodSearch;
+    const metricsPending = metricsSearch !== debouncedMetricsSearch;
+
 
     const rpc = useMemo(() => createRPC({ transport, endpoint: ENDPOINT }), [transport]);
 
@@ -34,17 +43,23 @@ export default function App() {
     const detail = useMethodDetail(rpc, selected);
     const metrics = useMetrics(rpc, view === 'metrics');
 
-    const compiledFilter = useMemo(() => compileGlobFilter(methodFilter), [methodFilter]);
+    const methodQuery = useMemo(() => compileFuzzyQuery(debouncedMethodSearch), [debouncedMethodSearch]);
+    const metricsQuery = useMemo(() => compileFuzzyQuery(debouncedMetricsSearch), [debouncedMetricsSearch]);
+
+    const filteredMethods = useMemo(
+        () => filterFuzzyMethods(methodQuery, methods),
+        [methodQuery, methods],
+    );
 
     // 过滤后的快照：不改变拉取范围，只裁剪 methods。
-    const filteredSnapshot = useMemo<MetricsSnapshot | undefined>(() => {
+    const filteredMetrics = useMemo<MetricsSnapshot | undefined>(() => {
         if (!metrics.snapshot) return undefined;
-        if (compiledFilter.passthrough) return metrics.snapshot;
+        if (metricsQuery.passthrough) return metrics.snapshot;
         return {
             ...metrics.snapshot,
-            methods: filterSnapshotMethods(compiledFilter, metrics.snapshot.methods) as MetricsSnapshot['methods'],
+            methods: filterFuzzySnapshotMethods(metricsQuery, metrics.snapshot.methods),
         };
-    }, [metrics.snapshot, compiledFilter]);
+    }, [metrics.snapshot, metricsQuery]);
 
     const generateDocs = useCallback(async () => {
         if (methods.length === 0) {
@@ -95,35 +110,51 @@ export default function App() {
                     </div>
 
                     {view === 'methods' ? (
-                        <>
-                            <h2>Methods</h2>
-                            <MethodTree methods={methods} selected={selected} onSelect={setSelected} />
-                        </>
-                    ) : (
                         <div className="metrics-sidebar">
-                            <h2>Metrics</h2>
-                            <p className="hint" style={{ margin: '0 0 8px' }}>
-                                📊 服务端 RPC 调用统计。
-                            </p>
+                            <h2>Methods</h2>
                             <label className="metrics-filter">
-                                <span className="metrics-filter-label">Filter</span>
+                                <span className="metrics-filter-label">Search</span>
                                 <input
                                     className="sf-input"
                                     type="text"
-                                    placeholder="user.*, !system.*"
-                                    value={methodFilter}
-                                    onChange={(e) => setMethodFilter(e.target.value)}
+                                    placeholder="输入关键词，空格分隔"
+                                    value={methodSearch}
+                                    onChange={(e) => setMethodSearch(e.target.value)}
                                     spellCheck={false}
                                 />
                             </label>
-                            <p className="hint metrics-filter-help">
-                                支持 <code>*</code> / <code>?</code> / <code>!</code>，多个模式用 <code>,</code> 分隔。
-                                <br />
-                                例：<code>user.*</code>、<code>*.get</code>、<code>!system.*</code>、<code>user.*,!user.secret</code>
-                            </p>
-                            {metrics.snapshot && (
+                            {!methodQuery.passthrough && (
                                 <p className="hint metrics-filter-stat">
-                                    匹配 {Object.keys(filteredSnapshot?.methods ?? {}).length} /{' '}
+                                    匹配 {filteredMethods.length} / {methods.length} 个方法
+                                </p>
+                            )}
+                            {filteredMethods.length === 0 && methods.length > 0 ? (
+                                <p className="empty">没有匹配的方法。</p>
+                            ) : (
+                                <MethodTree
+                                    methods={filteredMethods}
+                                    selected={selected}
+                                    onSelect={setSelected}
+                                />
+                            )}
+                        </div>
+                    ) : (
+                        <div className="metrics-sidebar">
+                            <h2>Metrics</h2>
+                            <label className="metrics-filter">
+                                <span className="metrics-filter-label">Search</span>
+                                <input
+                                    className="sf-input"
+                                    type="text"
+                                    placeholder="输入关键词，空格分隔"
+                                    value={metricsSearch}
+                                    onChange={(e) => setMetricsSearch(e.target.value)}
+                                    spellCheck={false}
+                                />
+                            </label>
+                            {metrics.snapshot && !metricsQuery.passthrough && (
+                                <p className="hint metrics-filter-stat">
+                                    匹配 {Object.keys(filteredMetrics?.methods ?? {}).length} /{' '}
                                     {Object.keys(metrics.snapshot.methods).length} 个方法
                                 </p>
                             )}
@@ -144,7 +175,7 @@ export default function App() {
                         </>
                     ) : (
                         <MetricsPanel
-                            snapshot={filteredSnapshot}
+                            snapshot={filteredMetrics}
                             previous={metrics.previous}
                             fetchedAt={metrics.fetchedAt}
                             loading={metrics.loading}
@@ -159,6 +190,7 @@ export default function App() {
                     )}
                 </div>
             </main>
+            <Footer />
         </div>
     );
 }

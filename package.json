@@ -34,16 +34,21 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./webclient": {
+      "types": "./dist/webclient/webui/src/client/index.d.ts",
+      "import": "./dist/webclient/webui/src/client/index.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
     "js-jsonrpc2": "dist/cli/cli.js"
   },
   "scripts": {
-    "build": "npm run clean && npm run build:lib && npm run build:webui",
+    "build": "npm run clean && run-p build:*",
     "build:lib": "tsc -p tsconfig.build.json && tsc-esm-fix",
-    "build:webui": "tsc -p webui//tsconfig.json && vite build --config webui/vite.config.ts",
-    "dev": "run-p dev:lib dev:webui",
+    "build:webclient": "tsc -p tsconfig.webclient.json && tsc-esm-fix",
+    "build:webui": "tsc -p webui/tsconfig.json && vite build --config webui/vite.config.ts",
+    "dev": "run-p dev:*",
     "dev:lib": "tsx src/cli/express.ts",
     "dev:webui": "vite build --config webui/vite.config.ts --watch --mode development",
     "typecheck": "npm run typecheck:lib && npm run typecheck:webui",

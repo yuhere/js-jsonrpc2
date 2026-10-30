@@ -1,4 +1,4 @@
-import type { TransportKind } from '../api/rpc';
+import type { TransportKind } from '../client';
 import { useTheme, type ThemeMode } from '../theme/ThemeProvider';
 
 interface ToolbarProps {

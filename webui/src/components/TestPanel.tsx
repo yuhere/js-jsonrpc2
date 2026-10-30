@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { RPCError, isStreamResult, type RPCClient, type TransportKind } from '../api/rpc';
+import { RPCError, isStreamResult, type RPCClient, type TransportKind, absoluteEndpoint } from '../client';
 import type { MethodDetail } from '../hooks/useMethodDetail';
 import { SchemaForm } from './SchemaForm';
 import { sampleFromSchema } from '../api/paramForm';
-import { absoluteEndpoint } from '../api/httpTransport';
 
 interface TestPanelProps {
     method: string;

@@ -1,4 +1,4 @@
-import type { RPCClient } from './rpc';
+import type { RPCClient } from '../client';
 
 // ─── 与后端 memory.ts 对齐的类型（只读快照） ─────────────────
 

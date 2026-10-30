@@ -1,4 +1,4 @@
-import type { RPCClient } from './rpc';
+import type { RPCClient } from '../client';
 import type { SchemaDescription } from './schema';
 
 export interface MethodDoc {
