@@ -623,6 +623,13 @@ textarea:focus {
     white-space: nowrap;
 }
 
+.toolbar .theme-select:first-of-type {
+    margin-left: auto;
+}
+.toolbar .theme-select + .theme-select {
+    margin-left: 0;
+}
+
 .theme-select-label {
     color: var(--fg-dim);
 }

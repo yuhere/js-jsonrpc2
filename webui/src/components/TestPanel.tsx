@@ -1,3 +1,4 @@
+import { useT } from '../i18n/I18nProvider';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { RPCError, isStreamResult, type RPCClient, type TransportKind, absoluteEndpoint } from '../client';
 import type { MethodDetail } from '../hooks/useMethodDetail';
@@ -14,12 +15,6 @@ interface TestPanelProps {
 
 type CopyKind = 'curl' | 'curl-cmd' | 'fetch';
 
-const COPY_OPTIONS: { value: CopyKind; label: string }[] = [
-    { value: 'curl', label: '复制 curl (bash)' },
-    { value: 'curl-cmd', label: '复制 curl (cmd)' },
-    { value: 'fetch', label: '复制 fetch' },
-];
-
 /** 格式化耗时：<1s 用 ms，否则用 s */
 function formatElapsed(ms: number): string {
     if (ms < 1000) return `${ms.toFixed(0)} ms`;
@@ -33,6 +28,14 @@ export function TestPanel({
     transport,
     endpoint,
 }: TestPanelProps) {
+    const t = useT();
+
+    const COPY_OPTIONS: { value: CopyKind; label: string }[] = [
+        { value: 'curl', label: t('test.copyCurl') },
+        { value: 'curl-cmd', label: t('test.copyCurlCmd') },
+        { value: 'fetch', label: t('test.copyFetch') },
+    ];
+
     const paramSchemas = useMemo(() => detail.signature.slice(1), [detail.signature]);
     const isStreamReturn = detail.signature[0]?.kind === 'stream';
 
@@ -109,9 +112,9 @@ export function TestPanel({
 
                 const totalAt = performance.now() - startedAt;
                 if (idx === 0) {
-                    lines.push(`（流已结束，无数据，总耗时 ${formatElapsed(totalAt)}）`);
+                    lines.push(t('test.streamEndedEmpty', { duration: formatElapsed(totalAt) }));
                 } else {
-                    lines.push(`（流已结束，共 ${idx} 帧，总耗时 ${formatElapsed(totalAt)}）`);
+                    lines.push(t('test.streamEnded', { count: idx, duration: formatElapsed(totalAt) }));
                 }
                 setOutput(lines.join('\n'));
                 setElapsed({ total: totalAt, firstFrame: firstFrameAt });
@@ -159,22 +162,20 @@ export function TestPanel({
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (e) {
-            setCopyError(
-                `复制失败：${e instanceof Error ? e.message : String(e)}`,
-            );
+            setCopyError(t('common.copyFailed', { error: e instanceof Error ? e.message : String(e) }));
         }
     };
 
     const canCopy = transport === 'http';
     const currentLabel =
-        COPY_OPTIONS.find((o) => o.value === copyKind)?.label ?? '复制';
+        COPY_OPTIONS.find((o) => o.value === copyKind)?.label ?? t('common.copy');
 
     return (
         <section className="test">
             <h3>
-                参数{' '}
+                {t('test.params')}{' '}
                 <span className="hint">
-                    （{paramSchemas.length} 个，按签名自动生成）
+                    {t('test.paramsHint', { count: paramSchemas.length })}
                 </span>
             </h3>
 
@@ -187,7 +188,9 @@ export function TestPanel({
 
             <div className="actions">
                 <button onClick={execute} disabled={!method || running}>
-                    {running ? (isStreamReturn ? '接收中…' : '执行中…') : (isStreamReturn ? '执行并接收流 ▶' : '执行 ▶')}
+                    {running
+                        ? isStreamReturn ? t('test.receiving') : t('test.executing')
+                        : isStreamReturn ? t('test.executeStream') : t('test.execute')}
                 </button>
 
                 <div className="split-button" ref={menuRef}>
@@ -196,9 +199,9 @@ export function TestPanel({
                         className="split-button-main"
                         onClick={() => void copyAs(copyKind)}
                         disabled={!method || !canCopy}
-                        title={canCopy ? '复制当前调用的等价代码' : '仅 HTTP 传输可生成代码'}
+                        title={canCopy ? t('test.copyTitle') : t('test.copyDisabledTitle')}
                     >
-                        {copied ? '已复制 ✓' : currentLabel}
+                        {copied ? t('common.copied') : currentLabel}
                     </button>
                     <button
                         type="button"
@@ -207,26 +210,20 @@ export function TestPanel({
                         disabled={!method || !canCopy}
                         aria-haspopup="menu"
                         aria-expanded={menuOpen}
-                        title="选择复制格式"
+                        title={t('test.chooseFormat')}
                     >
                         ▾
                     </button>
                     {menuOpen && (
                         <ul className="split-button-menu" role="menu">
                             {COPY_OPTIONS.map((opt) => (
-                                <li
-                                    key={opt.value}
-                                    role="menuitem"
-                                    onClick={() => {
-                                        setCopyKind(opt.value);
-                                        setMenuOpen(false);
-                                        void copyAs(opt.value);
-                                    }}
-                                >
+                                <li key={opt.value} role="menuitem" onClick={() => {
+                                    setCopyKind(opt.value);
+                                    setMenuOpen(false);
+                                    void copyAs(opt.value);
+                                }}>
                                     {opt.label}
-                                    {copyKind === opt.value && (
-                                        <span className="check">✓</span>
-                                    )}
+                                    {copyKind === opt.value && <span className="check">✓</span>}
                                 </li>
                             ))}
                         </ul>
@@ -235,38 +232,30 @@ export function TestPanel({
 
                 {copyError && <span className="error small">{copyError}</span>}
 
-                <button
-                    onClick={() => setValues(paramSchemas.map(sampleFromSchema))}
-                    disabled={!method}
-                >
-                    重置为示例
+                <button onClick={() => setValues(paramSchemas.map(sampleFromSchema))} disabled={!method}>
+                    {t('test.resetToSample')}
                 </button>
-                <button
-                    onClick={() => {
-                        setOutput('');
-                        setElapsed(null);
-                    }}
-                    disabled={!output && !elapsed}
-                >
-                    清空输出
+                <button onClick={() => { setOutput(''); setElapsed(null); }} disabled={!output && !elapsed}>
+                    {t('test.clearOutput')}
                 </button>
             </div>
 
             <h3>
-                结果{isStreamReturn && <span className="hint">（流式）</span>}
+                {t('test.result')}
+                {isStreamReturn && <span className="hint">{t('test.resultStream')}</span>}
                 {elapsed && (
                     <span className="elapsed-badge">
                         {' '}⏱ {formatElapsed(elapsed.total)}
                         {elapsed.firstFrame !== undefined && (
                             <span className="hint">
-                                {' '}· 首帧 {formatElapsed(elapsed.firstFrame)}
+                                {' '}· {t('test.firstFrame')} {formatElapsed(elapsed.firstFrame)}
                             </span>
                         )}
                     </span>
                 )}
             </h3>
             <pre className="output" ref={outRef}>
-                {output || '（尚未执行）'}
+                {output || t('test.notExecuted')}
             </pre>
         </section>
     );

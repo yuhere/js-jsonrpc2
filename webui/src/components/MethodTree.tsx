@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useT } from '../i18n/I18nProvider';
 
 interface TreeNode {
     name: string;
@@ -45,10 +46,12 @@ interface MethodTreeProps {
 }
 
 export function MethodTree({ methods, selected, onSelect }: MethodTreeProps) {
+    const t = useT();
+
     const tree = useMemo(() => buildTree(methods), [methods]);
 
     if (methods.length === 0) {
-        return <p className="empty">暂无可用方法。</p>;
+        return <p className="empty">{t('sidebar.noMethods')}</p>;
     }
 
     return (

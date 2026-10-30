@@ -1,10 +1,14 @@
+import { useT } from '../i18n/I18nProvider';
+
 const NPM_URL = 'https://www.npmjs.com/package/@yuhere/js-jsonrpc2/';
 const GITHUB_URL = 'https://github.com/yuhere/js-jsonrpc2';
 
 export function Footer() {
+    const t = useT();
+
     return (
         <footer className="footer">
-            <span className="footer-version" title="当前构建版本">
+            <span className="footer-version" title={t('footer.version')}>
                 v{__APP_VERSION__}
             </span>
 
@@ -14,8 +18,8 @@ export function Footer() {
                     href={NPM_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title="在 npm 上查看 @yuhere/js-jsonrpc2"
-                    aria-label="npm package"
+                    title={t('footer.npm')}
+                    aria-label={t('footer.npm')}
                 >
                     <svg
                         viewBox="0 0 18 7"
@@ -35,8 +39,8 @@ export function Footer() {
                     href={GITHUB_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title="在 GitHub 上查看 yuhere/js-jsonrpc2"
-                    aria-label="GitHub repository"
+                    title={t('footer.github')}
+                    aria-label={t('footer.github')}
                 >
                     <svg
                         viewBox="0 0 16 16"

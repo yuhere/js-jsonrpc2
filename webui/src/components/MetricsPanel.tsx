@@ -4,6 +4,7 @@ import {
     type MethodDerived,
     type MetricsSnapshot,
 } from '../api/metrics';
+import { useT } from '../i18n/I18nProvider';
 
 interface MetricsPanelProps {
     snapshot: MetricsSnapshot | undefined;
@@ -59,6 +60,8 @@ export function MetricsPanel({
     intervalMs,
     onIntervalChange,
 }: MetricsPanelProps) {
+    const t = useT();
+
     const derived = useMemo<MethodDerived[]>(() => {
         if (!snapshot) return [];
         const dtSeconds =
@@ -94,10 +97,8 @@ export function MetricsPanel({
     if (!available) {
         return (
             <section className="metrics">
-                <h2>Metrics</h2>
-                <p className="hint">
-                    服务端未启用 <code>system.metrics</code>（<code>withSystemMethods: false</code> 或未注册）。
-                </p>
+                <h2>{t('metrics.title')}</h2>
+                <p className="hint">{t('metrics.unavailable')}</p>
             </section>
         );
     }
@@ -105,7 +106,7 @@ export function MetricsPanel({
     return (
         <section className="metrics">
             <header className="metrics-header">
-                <h2>Metrics</h2>
+                <h2>{t('metrics.title')}</h2>
                 <div className="metrics-controls">
                     <label className="metrics-auto">
                         <input
@@ -113,14 +114,14 @@ export function MetricsPanel({
                             checked={autoRefresh}
                             onChange={(e) => onAutoRefreshChange(e.target.checked)}
                         />
-                        自动刷新
+                        {t('metrics.autoRefresh')}
                     </label>
                     <select
                         className="sf-input"
                         value={intervalMs}
                         onChange={(e) => onIntervalChange(Number(e.target.value))}
                         disabled={!autoRefresh}
-                        title="刷新间隔"
+                        title={t('metrics.interval')}
                     >
                         <option value={1000}>1s</option>
                         <option value={3000}>3s</option>
@@ -128,58 +129,58 @@ export function MetricsPanel({
                         <option value={10000}>10s</option>
                     </select>
                     <button onClick={onRefresh} disabled={loading}>
-                        {loading ? '刷新中…' : '立即刷新'}
+                        {loading ? t('metrics.refreshing') : t('metrics.refreshNow')}
                     </button>
                     {snapshot && (
                         <span className="hint">
-                            uptime {formatDuration(snapshot.uptimeMs / 1000)}
+                            {t('metrics.uptime')} {formatDuration(snapshot.uptimeMs / 1000)}
                         </span>
                     )}
                 </div>
             </header>
 
             {error && <p className="error">{error}</p>}
-            {!snapshot && !error && <p className="hint">加载中…</p>}
+            {!snapshot && !error && <p className="hint">{t('metrics.loading')}</p>}
 
             {snapshot && (
                 <>
                     <div className="metrics-cards">
-                        <MetricCard label="Methods" value={String(totals.methods)} />
-                        <MetricCard label="Calls" value={String(totals.calls)} />
-                        <MetricCard label="Streams" value={String(totals.streams)} />
+                        <MetricCard label={t('metrics.methods')} value={String(totals.methods)} />
+                        <MetricCard label={t('metrics.calls')} value={String(totals.calls)} />
+                        <MetricCard label={t('metrics.streams')} value={String(totals.streams)} />
                         <MetricCard
-                            label="Errors"
+                            label={t('metrics.errors')}
                             value={String(totals.errors)}
                             tone={totals.errors > 0 ? 'danger' : undefined}
                         />
                         <MetricCard
-                            label="Error rate"
+                            label={t('metrics.errorRate')}
                             value={totals.calls > 0 ? formatPercent(totals.errors / totals.calls) : '—'}
                             tone={totals.calls > 0 && totals.errors / totals.calls > 0.05 ? 'danger' : undefined}
                         />
                         <MetricCard
-                            label="Invalid requests"
+                            label={t('metrics.invalidRequests')}
                             value={String(snapshot.invalidRequests)}
                             tone={snapshot.invalidRequests > 0 ? 'warn' : undefined}
                         />
                     </div>
 
                     <h3>
-                        Non-stream methods
-                        <span className="hint"> （{nonStreamMethods.length}）</span>
+                        {t('metrics.nonStreamTitle')}
+                        <span className="hint"> {t('metrics.countHint', { count: nonStreamMethods.length })}</span>
                     </h3>
                     {nonStreamMethods.length === 0 ? (
-                        <p className="hint">暂无数据。</p>
+                        <p className="hint">{t('metrics.noData')}</p>
                     ) : (
                         <NonStreamTable rows={nonStreamMethods} />
                     )}
 
                     <h3>
-                        Stream methods
-                        <span className="hint"> （{streamMethods.length}）</span>
+                        {t('metrics.streamTitle')}
+                        <span className="hint"> {t('metrics.countHint', { count: streamMethods.length })}</span>
                     </h3>
                     {streamMethods.length === 0 ? (
-                        <p className="hint">暂无流式调用。</p>
+                        <p className="hint">{t('metrics.noStreams')}</p>
                     ) : (
                         <StreamTable rows={streamMethods} />
                     )}
@@ -199,19 +200,20 @@ function MetricCard({ label, value, tone }: { label: string; value: string; tone
 }
 
 function NonStreamTable({ rows }: { rows: MethodDerived[] }) {
+    const t = useT();
     return (
         <table className="metrics-table">
             <thead>
                 <tr>
-                    <th>method</th>
-                    <th className="num">calls</th>
-                    <th className="num">rate/s</th>
-                    <th className="num">errors</th>
-                    <th className="num">err%</th>
-                    <th className="num">p50</th>
-                    <th className="num">p95</th>
-                    <th className="num">p99</th>
-                    <th className="num">avg</th>
+                    <th>{t('metrics.colMethod')}</th>
+                    <th className="num">{t('metrics.colCalls')}</th>
+                    <th className="num">{t('metrics.colRate')}</th>
+                    <th className="num">{t('metrics.colErrors')}</th>
+                    <th className="num">{t('metrics.colErrPct')}</th>
+                    <th className="num">{t('metrics.colP50')}</th>
+                    <th className="num">{t('metrics.colP95')}</th>
+                    <th className="num">{t('metrics.colP99')}</th>
+                    <th className="num">{t('metrics.colAvg')}</th>
                 </tr>
             </thead>
             <tbody>
@@ -241,21 +243,22 @@ function NonStreamTable({ rows }: { rows: MethodDerived[] }) {
 }
 
 function StreamTable({ rows }: { rows: MethodDerived[] }) {
+    const t = useT();
     return (
         <table className="metrics-table">
             <thead>
                 <tr>
-                    <th>method</th>
-                    <th className="num">opened</th>
-                    <th className="num">completed</th>
-                    <th className="num">failed</th>
-                    <th className="num">aborted</th>
-                    <th className="num">complete%</th>
-                    <th className="num">abort%</th>
-                    <th className="num">avg chunks</th>
-                    <th className="num">ttfb p50</th>
-                    <th className="num">ttfb p95</th>
-                    <th className="num">duration avg</th>
+                    <th>{t('metrics.colMethod')}</th>
+                    <th className="num">{t('metrics.colOpened')}</th>
+                    <th className="num">{t('metrics.colCompleted')}</th>
+                    <th className="num">{t('metrics.colFailed')}</th>
+                    <th className="num">{t('metrics.colAborted')}</th>
+                    <th className="num">{t('metrics.colCompletePct')}</th>
+                    <th className="num">{t('metrics.colAbortPct')}</th>
+                    <th className="num">{t('metrics.colAvgChunks')}</th>
+                    <th className="num">{t('metrics.colTtfbP50')}</th>
+                    <th className="num">{t('metrics.colTtfbP95')}</th>
+                    <th className="num">{t('metrics.colDurationAvg')}</th>
                 </tr>
             </thead>
             <tbody>

@@ -8206,11 +8206,11 @@ var require_react_jsx_runtime_production_min = /* @__PURE__ */ __commonJSMin(((e
 var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_jsx_runtime_production_min();
 })))();
-var STORAGE_KEY = "jsonrpc2.theme";
+var STORAGE_KEY$1 = "jsonrpc2.theme";
 var ThemeContext = (0, import_react.createContext)(null);
-function readStoredMode() {
+function readStoredMode$1() {
 	try {
-		const v = localStorage.getItem(STORAGE_KEY);
+		const v = localStorage.getItem(STORAGE_KEY$1);
 		if (v === "light" || v === "dark" || v === "system") return v;
 	} catch {}
 	return "system";
@@ -8219,7 +8219,7 @@ function prefersDark() {
 	return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
 }
 function ThemeProvider({ children }) {
-	const [mode, setModeState] = (0, import_react.useState)(readStoredMode);
+	const [mode, setModeState] = (0, import_react.useState)(readStoredMode$1);
 	const [systemDark, setSystemDark] = (0, import_react.useState)(prefersDark);
 	(0, import_react.useEffect)(() => {
 		const mql = window.matchMedia("(prefers-color-scheme: dark)");
@@ -8238,7 +8238,7 @@ function ThemeProvider({ children }) {
 	(0, import_react.useEffect)(() => {
 		document.documentElement.setAttribute("data-theme", resolved);
 		try {
-			localStorage.setItem(STORAGE_KEY, mode);
+			localStorage.setItem(STORAGE_KEY$1, mode);
 		} catch {}
 	}, [resolved, mode]);
 	const setMode = (0, import_react.useCallback)((m) => setModeState(m), []);
@@ -8261,54 +8261,812 @@ function useTheme() {
 	if (!ctx) throw new Error("useTheme must be used within <ThemeProvider>");
 	return ctx;
 }
+var MESSAGES = {
+	en: {
+		common: {
+			loading: "Loading…",
+			refresh: "Refresh",
+			refreshing: "Refreshing…",
+			reset: "Reset",
+			clear: "Clear",
+			delete: "Delete",
+			add: "Add",
+			copy: "Copy",
+			copied: "Copied ✓",
+			copyFailed: "Copy failed: {error}",
+			generate: "Generate",
+			generating: "Generating…",
+			none: "None",
+			empty: "Empty"
+		},
+		toolbar: {
+			title: "JSON-RPC 2.0",
+			transport: "Transport",
+			http: "HTTP",
+			ws: "WebSocket",
+			refreshMethods: "Refresh methods",
+			refreshMethodsLoading: "Refreshing…",
+			generateDocs: "Generate docs ⬇",
+			generateDocsLoading: "Generating…",
+			generateDocsTitle: "Fetch help and signatures of all methods, render Markdown and download",
+			theme: "Theme",
+			themeSystem: "System",
+			themeLight: "Light",
+			themeDark: "Dark",
+			language: "Language",
+			languageSystem: "Follow system",
+			languageEn: "English",
+			languageZhCN: "简体中文",
+			languageZhTW: "繁體中文",
+			languageJa: "日本語"
+		},
+		sidebar: {
+			methods: "Methods",
+			metrics: "Metrics",
+			search: "Search",
+			searchPlaceholder: "Type keywords, space separated",
+			matchCount: "Matched {matched} / {total} methods",
+			noMatch: "No matching methods.",
+			noMethods: "No methods available."
+		},
+		view: {
+			label: "View",
+			methods: "Methods",
+			metrics: "Metrics"
+		},
+		method: {
+			selectHint: "← Select a method from the left to view help and signature.",
+			loading: "Loading…",
+			loadFailed: "Load failed: {error}",
+			help: "Help",
+			noHelp: "(no help available)",
+			returnType: "Return type",
+			returnTypeHint: "(the server does not validate execution results against this type; actual values may differ)",
+			none: "(none)"
+		},
+		test: {
+			params: "Parameters",
+			paramsHint: "({count}, auto-generated from signature)",
+			noParams: "This method takes no parameters.",
+			execute: "Execute ▶",
+			executing: "Executing…",
+			executeStream: "Execute & receive stream ▶",
+			receiving: "Receiving…",
+			resetToSample: "Reset to sample",
+			clearOutput: "Clear output",
+			result: "Result",
+			resultStream: " (streaming)",
+			notExecuted: "(not executed yet)",
+			copyCurl: "Copy curl (bash)",
+			copyCurlCmd: "Copy curl (cmd)",
+			copyFetch: "Copy fetch",
+			copyTitle: "Copy equivalent code for current call",
+			copyDisabledTitle: "Only HTTP transport can generate code",
+			chooseFormat: "Choose format",
+			streamEnded: "(stream ended, {count} frames, total {duration})",
+			streamEndedEmpty: "(stream ended, no data, total {duration})",
+			elapsed: "elapsed",
+			firstFrame: "first frame",
+			jsonError: "JSON error: {error}"
+		},
+		schema: {
+			nullable: "nullable",
+			setNull: "Set null",
+			fillValue: "Fill value",
+			fixedValue: "(fixed value)",
+			unionNoBranch: "(union has no branch)",
+			arrayNoItem: "(array has no item schema)",
+			recordNoValue: "(record has no value schema)",
+			recordAddPlaceholder: "New key",
+			addRecordKey: "+ Add key",
+			addItem: "+ Add item",
+			strictHint: "(non-strict mode, extra fields allowed)",
+			paramIndex: "Parameter [{index}]",
+			items: "items",
+			values: "values",
+			optionIndex: "option[{index}]",
+			inner: "inner"
+		},
+		metrics: {
+			title: "Metrics",
+			unavailable: "Server did not enable system.metrics (withSystemMethods: false or not registered).",
+			autoRefresh: "Auto refresh",
+			interval: "Interval",
+			refreshNow: "Refresh now",
+			refreshing: "Refreshing…",
+			uptime: "uptime",
+			loading: "Loading…",
+			methods: "Methods",
+			calls: "Calls",
+			streams: "Streams",
+			errors: "Errors",
+			errorRate: "Error rate",
+			invalidRequests: "Invalid requests",
+			nonStreamTitle: "Non-stream methods",
+			streamTitle: "Stream methods",
+			noData: "No data.",
+			noStreams: "No streaming calls.",
+			countHint: " ({count})",
+			colMethod: "method",
+			colCalls: "calls",
+			colRate: "rate/s",
+			colErrors: "errors",
+			colErrPct: "err%",
+			colP50: "p50",
+			colP95: "p95",
+			colP99: "p99",
+			colAvg: "avg",
+			colOpened: "opened",
+			colCompleted: "completed",
+			colFailed: "failed",
+			colAborted: "aborted",
+			colCompletePct: "complete%",
+			colAbortPct: "abort%",
+			colAvgChunks: "avg chunks",
+			colTtfbP50: "ttfb p50",
+			colTtfbP95: "ttfb p95",
+			colDurationAvg: "duration avg"
+		},
+		footer: {
+			version: "version",
+			npm: "npm package",
+			github: "GitHub repository"
+		},
+		alerts: {
+			emptyMethods: "Method list is empty. Please refresh methods first.",
+			docsFailed: "Failed to generate docs: {error}"
+		}
+	},
+	"zh-CN": {
+		common: {
+			loading: "加载中…",
+			refresh: "刷新",
+			refreshing: "刷新中…",
+			reset: "重置",
+			clear: "清空",
+			delete: "删除",
+			add: "添加",
+			copy: "复制",
+			copied: "已复制 ✓",
+			copyFailed: "复制失败：{error}",
+			generate: "生成",
+			generating: "生成中…",
+			none: "无",
+			empty: "空"
+		},
+		toolbar: {
+			title: "JSON-RPC 2.0",
+			transport: "传输方式",
+			http: "HTTP",
+			ws: "WebSocket",
+			refreshMethods: "刷新方法列表",
+			refreshMethodsLoading: "刷新中…",
+			generateDocs: "生成文档 ⬇",
+			generateDocsLoading: "生成中…",
+			generateDocsTitle: "拉取所有方法的帮助与签名，生成 Markdown 文档并下载",
+			theme: "主题",
+			themeSystem: "跟随系统",
+			themeLight: "亮",
+			themeDark: "暗",
+			language: "语言",
+			languageSystem: "跟随系统语言",
+			languageEn: "English",
+			languageZhCN: "简体中文",
+			languageZhTW: "繁體中文",
+			languageJa: "日本語"
+		},
+		sidebar: {
+			methods: "Methods",
+			metrics: "Metrics",
+			search: "搜索",
+			searchPlaceholder: "输入关键词，空格分隔",
+			matchCount: "匹配 {matched} / {total} 个方法",
+			noMatch: "没有匹配的方法。",
+			noMethods: "暂无可用方法。"
+		},
+		view: {
+			label: "视图",
+			methods: "Methods",
+			metrics: "Metrics"
+		},
+		method: {
+			selectHint: "← 从左侧选择一个方法查看帮助与签名。",
+			loading: "加载中…",
+			loadFailed: "加载失败：{error}",
+			help: "Help",
+			noHelp: "（无帮助信息）",
+			returnType: "返回类型",
+			returnTypeHint: "（服务端不会校验执行结果是否符合此类型，实际返回值可能会有所不同）",
+			none: "（暂无）"
+		},
+		test: {
+			params: "参数",
+			paramsHint: "（{count} 个，按签名自动生成）",
+			noParams: "此方法无需参数。",
+			execute: "执行 ▶",
+			executing: "执行中…",
+			executeStream: "执行并接收流 ▶",
+			receiving: "接收中…",
+			resetToSample: "重置为示例",
+			clearOutput: "清空输出",
+			result: "结果",
+			resultStream: "（流式）",
+			notExecuted: "（尚未执行）",
+			copyCurl: "复制 curl (bash)",
+			copyCurlCmd: "复制 curl (cmd)",
+			copyFetch: "复制 fetch",
+			copyTitle: "复制当前调用的等价代码",
+			copyDisabledTitle: "仅 HTTP 传输可生成代码",
+			chooseFormat: "选择复制格式",
+			streamEnded: "（流已结束，共 {count} 帧，总耗时 {duration}）",
+			streamEndedEmpty: "（流已结束，无数据，总耗时 {duration}）",
+			elapsed: "耗时",
+			firstFrame: "首帧",
+			jsonError: "JSON 错误：{error}"
+		},
+		schema: {
+			nullable: "nullable",
+			setNull: "置 null",
+			fillValue: "填值",
+			fixedValue: "（固定值）",
+			unionNoBranch: "（union 无分支）",
+			arrayNoItem: "（数组无 item schema）",
+			recordNoValue: "（record 无 value schema）",
+			recordAddPlaceholder: "新键名",
+			addRecordKey: "+ 添加键",
+			addItem: "+ 添加项",
+			strictHint: "（非 strict 模式，允许额外字段）",
+			paramIndex: "参数 [{index}]",
+			items: "items",
+			values: "values",
+			optionIndex: "option[{index}]",
+			inner: "inner"
+		},
+		metrics: {
+			title: "Metrics",
+			unavailable: "服务端未启用 system.metrics（withSystemMethods: false 或未注册）。",
+			autoRefresh: "自动刷新",
+			interval: "刷新间隔",
+			refreshNow: "立即刷新",
+			refreshing: "刷新中…",
+			uptime: "uptime",
+			loading: "加载中…",
+			methods: "Methods",
+			calls: "Calls",
+			streams: "Streams",
+			errors: "Errors",
+			errorRate: "Error rate",
+			invalidRequests: "Invalid requests",
+			nonStreamTitle: "Non-stream methods",
+			streamTitle: "Stream methods",
+			noData: "暂无数据。",
+			noStreams: "暂无流式调用。",
+			countHint: "（{count}）",
+			colMethod: "method",
+			colCalls: "calls",
+			colRate: "rate/s",
+			colErrors: "errors",
+			colErrPct: "err%",
+			colP50: "p50",
+			colP95: "p95",
+			colP99: "p99",
+			colAvg: "avg",
+			colOpened: "opened",
+			colCompleted: "completed",
+			colFailed: "failed",
+			colAborted: "aborted",
+			colCompletePct: "complete%",
+			colAbortPct: "abort%",
+			colAvgChunks: "avg chunks",
+			colTtfbP50: "ttfb p50",
+			colTtfbP95: "ttfb p95",
+			colDurationAvg: "duration avg"
+		},
+		footer: {
+			version: "版本",
+			npm: "npm 包",
+			github: "GitHub 仓库"
+		},
+		alerts: {
+			emptyMethods: "方法列表为空，请先刷新方法列表。",
+			docsFailed: "生成文档失败：{error}"
+		}
+	},
+	"zh-TW": {
+		common: {
+			loading: "載入中…",
+			refresh: "重新整理",
+			refreshing: "重新整理中…",
+			reset: "重設",
+			clear: "清除",
+			delete: "刪除",
+			add: "新增",
+			copy: "複製",
+			copied: "已複製 ✓",
+			copyFailed: "複製失敗：{error}",
+			generate: "產生",
+			generating: "產生中…",
+			none: "無",
+			empty: "空"
+		},
+		toolbar: {
+			title: "JSON-RPC 2.0",
+			transport: "傳輸方式",
+			http: "HTTP",
+			ws: "WebSocket",
+			refreshMethods: "重新整理方法清單",
+			refreshMethodsLoading: "重新整理中…",
+			generateDocs: "產生文件 ⬇",
+			generateDocsLoading: "產生中…",
+			generateDocsTitle: "取得所有方法的說明與簽章，產生 Markdown 文件並下載",
+			theme: "主題",
+			themeSystem: "跟隨系統",
+			themeLight: "亮",
+			themeDark: "暗",
+			language: "語言",
+			languageSystem: "跟隨系統語言",
+			languageEn: "English",
+			languageZhCN: "简体中文",
+			languageZhTW: "繁體中文",
+			languageJa: "日本語"
+		},
+		sidebar: {
+			methods: "Methods",
+			metrics: "Metrics",
+			search: "搜尋",
+			searchPlaceholder: "輸入關鍵字，以空格分隔",
+			matchCount: "符合 {matched} / {total} 個方法",
+			noMatch: "沒有符合的方法。",
+			noMethods: "尚無可用方法。"
+		},
+		view: {
+			label: "檢視",
+			methods: "Methods",
+			metrics: "Metrics"
+		},
+		method: {
+			selectHint: "← 從左側選擇一個方法以檢視說明與簽章。",
+			loading: "載入中…",
+			loadFailed: "載入失敗：{error}",
+			help: "Help",
+			noHelp: "（無說明資訊）",
+			returnType: "回傳型別",
+			returnTypeHint: "（伺服器不會驗證執行結果是否符合此型別，實際回傳值可能有所不同）",
+			none: "（暫無）"
+		},
+		test: {
+			params: "參數",
+			paramsHint: "（{count} 個，依簽章自動產生）",
+			noParams: "此方法無需參數。",
+			execute: "執行 ▶",
+			executing: "執行中…",
+			executeStream: "執行並接收串流 ▶",
+			receiving: "接收中…",
+			resetToSample: "重設為範例",
+			clearOutput: "清除輸出",
+			result: "結果",
+			resultStream: "（串流）",
+			notExecuted: "（尚未執行）",
+			copyCurl: "複製 curl (bash)",
+			copyCurlCmd: "複製 curl (cmd)",
+			copyFetch: "複製 fetch",
+			copyTitle: "複製目前呼叫的等效程式碼",
+			copyDisabledTitle: "僅 HTTP 傳輸可產生程式碼",
+			chooseFormat: "選擇複製格式",
+			streamEnded: "（串流已結束，共 {count} 幀，總耗時 {duration}）",
+			streamEndedEmpty: "（串流已結束，無資料，總耗時 {duration}）",
+			elapsed: "耗時",
+			firstFrame: "首幀",
+			jsonError: "JSON 錯誤：{error}"
+		},
+		schema: {
+			nullable: "nullable",
+			setNull: "設為 null",
+			fillValue: "填入值",
+			fixedValue: "（固定值）",
+			unionNoBranch: "（union 無分支）",
+			arrayNoItem: "（陣列無 item schema）",
+			recordNoValue: "（record 無 value schema）",
+			recordAddPlaceholder: "新鍵名",
+			addRecordKey: "+ 新增鍵",
+			addItem: "+ 新增項目",
+			strictHint: "（非 strict 模式，允許額外欄位）",
+			paramIndex: "參數 [{index}]",
+			items: "items",
+			values: "values",
+			optionIndex: "option[{index}]",
+			inner: "inner"
+		},
+		metrics: {
+			title: "Metrics",
+			unavailable: "伺服器未啟用 system.metrics（withSystemMethods: false 或未註冊）。",
+			autoRefresh: "自動重新整理",
+			interval: "重新整理間隔",
+			refreshNow: "立即重新整理",
+			refreshing: "重新整理中…",
+			uptime: "uptime",
+			loading: "載入中…",
+			methods: "Methods",
+			calls: "Calls",
+			streams: "Streams",
+			errors: "Errors",
+			errorRate: "Error rate",
+			invalidRequests: "Invalid requests",
+			nonStreamTitle: "Non-stream methods",
+			streamTitle: "Stream methods",
+			noData: "尚無資料。",
+			noStreams: "尚無串流呼叫。",
+			countHint: "（{count}）",
+			colMethod: "method",
+			colCalls: "calls",
+			colRate: "rate/s",
+			colErrors: "errors",
+			colErrPct: "err%",
+			colP50: "p50",
+			colP95: "p95",
+			colP99: "p99",
+			colAvg: "avg",
+			colOpened: "opened",
+			colCompleted: "completed",
+			colFailed: "failed",
+			colAborted: "aborted",
+			colCompletePct: "complete%",
+			colAbortPct: "abort%",
+			colAvgChunks: "avg chunks",
+			colTtfbP50: "ttfb p50",
+			colTtfbP95: "ttfb p95",
+			colDurationAvg: "duration avg"
+		},
+		footer: {
+			version: "版本",
+			npm: "npm 套件",
+			github: "GitHub 儲存庫"
+		},
+		alerts: {
+			emptyMethods: "方法清單為空，請先重新整理方法清單。",
+			docsFailed: "產生文件失敗：{error}"
+		}
+	},
+	ja: {
+		common: {
+			loading: "読み込み中…",
+			refresh: "更新",
+			refreshing: "更新中…",
+			reset: "リセット",
+			clear: "クリア",
+			delete: "削除",
+			add: "追加",
+			copy: "コピー",
+			copied: "コピーしました ✓",
+			copyFailed: "コピーに失敗しました：{error}",
+			generate: "生成",
+			generating: "生成中…",
+			none: "なし",
+			empty: "空"
+		},
+		toolbar: {
+			title: "JSON-RPC 2.0",
+			transport: "トランスポート",
+			http: "HTTP",
+			ws: "WebSocket",
+			refreshMethods: "メソッド一覧を更新",
+			refreshMethodsLoading: "更新中…",
+			generateDocs: "ドキュメント生成 ⬇",
+			generateDocsLoading: "生成中…",
+			generateDocsTitle: "全メソッドのヘルプとシグネチャを取得し、Markdown を生成してダウンロード",
+			theme: "テーマ",
+			themeSystem: "システムに従う",
+			themeLight: "ライト",
+			themeDark: "ダーク",
+			language: "言語",
+			languageSystem: "システム言語に従う",
+			languageEn: "English",
+			languageZhCN: "简体中文",
+			languageZhTW: "繁體中文",
+			languageJa: "日本語"
+		},
+		sidebar: {
+			methods: "Methods",
+			metrics: "Metrics",
+			search: "検索",
+			searchPlaceholder: "キーワードを入力（スペース区切り）",
+			matchCount: "{matched} / {total} 件のメソッドが一致",
+			noMatch: "一致するメソッドはありません。",
+			noMethods: "利用可能なメソッドがありません。"
+		},
+		view: {
+			label: "ビュー",
+			methods: "Methods",
+			metrics: "Metrics"
+		},
+		method: {
+			selectHint: "← 左側からメソッドを選択すると、ヘルプとシグネチャが表示されます。",
+			loading: "読み込み中…",
+			loadFailed: "読み込み失敗：{error}",
+			help: "Help",
+			noHelp: "（ヘルプ情報なし）",
+			returnType: "戻り値の型",
+			returnTypeHint: "（サーバーは実行結果がこの型に一致するか検証しません。実際の戻り値は異なる場合があります）",
+			none: "（なし）"
+		},
+		test: {
+			params: "パラメータ",
+			paramsHint: "（{count} 個、シグネチャから自動生成）",
+			noParams: "このメソッドはパラメータを取りません。",
+			execute: "実行 ▶",
+			executing: "実行中…",
+			executeStream: "実行してストリーム受信 ▶",
+			receiving: "受信中…",
+			resetToSample: "サンプルに戻す",
+			clearOutput: "出力をクリア",
+			result: "結果",
+			resultStream: "（ストリーミング）",
+			notExecuted: "（未実行）",
+			copyCurl: "curl をコピー (bash)",
+			copyCurlCmd: "curl をコピー (cmd)",
+			copyFetch: "fetch をコピー",
+			copyTitle: "現在の呼び出しに相当するコードをコピー",
+			copyDisabledTitle: "コード生成は HTTP トランスポートのみ対応",
+			chooseFormat: "コピー形式を選択",
+			streamEnded: "（ストリーム終了、{count} フレーム、合計 {duration}）",
+			streamEndedEmpty: "（ストリーム終了、データなし、合計 {duration}）",
+			elapsed: "経過",
+			firstFrame: "初回フレーム",
+			jsonError: "JSON エラー：{error}"
+		},
+		schema: {
+			nullable: "nullable",
+			setNull: "null にする",
+			fillValue: "値を入力",
+			fixedValue: "（固定値）",
+			unionNoBranch: "（union に分岐がありません）",
+			arrayNoItem: "（配列に item schema がありません）",
+			recordNoValue: "（record に value schema がありません）",
+			recordAddPlaceholder: "新しいキー",
+			addRecordKey: "+ キーを追加",
+			addItem: "+ 項目を追加",
+			strictHint: "（非 strict モード、追加フィールドを許可）",
+			paramIndex: "パラメータ [{index}]",
+			items: "items",
+			values: "values",
+			optionIndex: "option[{index}]",
+			inner: "inner"
+		},
+		metrics: {
+			title: "Metrics",
+			unavailable: "サーバーで system.metrics が有効になっていません（withSystemMethods: false または未登録）。",
+			autoRefresh: "自動更新",
+			interval: "更新間隔",
+			refreshNow: "今すぐ更新",
+			refreshing: "更新中…",
+			uptime: "uptime",
+			loading: "読み込み中…",
+			methods: "Methods",
+			calls: "Calls",
+			streams: "Streams",
+			errors: "Errors",
+			errorRate: "Error rate",
+			invalidRequests: "Invalid requests",
+			nonStreamTitle: "Non-stream methods",
+			streamTitle: "Stream methods",
+			noData: "データがありません。",
+			noStreams: "ストリーミング呼び出しはありません。",
+			countHint: "（{count}）",
+			colMethod: "method",
+			colCalls: "calls",
+			colRate: "rate/s",
+			colErrors: "errors",
+			colErrPct: "err%",
+			colP50: "p50",
+			colP95: "p95",
+			colP99: "p99",
+			colAvg: "avg",
+			colOpened: "opened",
+			colCompleted: "completed",
+			colFailed: "failed",
+			colAborted: "aborted",
+			colCompletePct: "complete%",
+			colAbortPct: "abort%",
+			colAvgChunks: "avg chunks",
+			colTtfbP50: "ttfb p50",
+			colTtfbP95: "ttfb p95",
+			colDurationAvg: "duration avg"
+		},
+		footer: {
+			version: "バージョン",
+			npm: "npm パッケージ",
+			github: "GitHub リポジトリ"
+		},
+		alerts: {
+			emptyMethods: "メソッド一覧が空です。先にメソッド一覧を更新してください。",
+			docsFailed: "ドキュメント生成に失敗しました：{error}"
+		}
+	}
+};
+//#endregion
+//#region webui/src/i18n/detect.ts
+/** 把 BCP-47 语言标签映射到我们支持的 4 种 locale。 */
+function normalizeLocale(tag) {
+	if (!tag) return void 0;
+	const t = tag.toLowerCase();
+	if (t === "ja" || t.startsWith("ja-")) return "ja";
+	if (t === "zh" || t.startsWith("zh-")) {
+		if (t.includes("hant") || t.startsWith("zh-tw") || t.startsWith("zh-hk") || t.startsWith("zh-mo")) return "zh-TW";
+		return "zh-CN";
+	}
+	if (t === "en" || t.startsWith("en-")) return "en";
+}
+/** 读取浏览器语言偏好，取第一个能映射的；否则回退 en。 */
+function detectSystemLocale() {
+	const nav = typeof navigator !== "undefined" ? navigator : void 0;
+	const candidates = [];
+	if (nav?.languages && nav.languages.length > 0) candidates.push(...nav.languages);
+	if (nav?.language) candidates.push(nav.language);
+	for (const c of candidates) {
+		const loc = normalizeLocale(c);
+		if (loc) return loc;
+	}
+	return "en";
+}
+//#endregion
+//#region webui/src/i18n/I18nProvider.tsx
+var STORAGE_KEY = "jsonrpc2.locale";
+var I18nContext = (0, import_react.createContext)(null);
+var VALID_MODES = [
+	"system",
+	"en",
+	"zh-CN",
+	"zh-TW",
+	"ja"
+];
+function readStoredMode() {
+	try {
+		const v = localStorage.getItem(STORAGE_KEY);
+		if (v && VALID_MODES.includes(v)) return v;
+	} catch {}
+	return "system";
+}
+function getByPath(obj, path) {
+	const parts = path.split(".");
+	let cur = obj;
+	for (const p of parts) {
+		if (cur == null || typeof cur !== "object") return void 0;
+		cur = cur[p];
+	}
+	return cur;
+}
+function interpolate(text, vars) {
+	if (!vars) return text;
+	return text.replace(/\{(\w+)\}/g, (_, name) => {
+		const v = vars[name];
+		return v === void 0 ? `{${name}}` : String(v);
+	});
+}
+function I18nProvider({ children }) {
+	const [mode, setModeState] = (0, import_react.useState)(readStoredMode);
+	const [systemLocale, setSystemLocale] = (0, import_react.useState)(detectSystemLocale);
+	(0, import_react.useEffect)(() => {
+		const onChange = () => setSystemLocale(detectSystemLocale());
+		window.addEventListener("languagechange", onChange);
+		return () => window.removeEventListener("languagechange", onChange);
+	}, []);
+	const locale = (0, import_react.useMemo)(() => {
+		if (mode === "system") return systemLocale;
+		return normalizeLocale(mode) ?? systemLocale;
+	}, [mode, systemLocale]);
+	(0, import_react.useEffect)(() => {
+		document.documentElement.setAttribute("lang", locale);
+		try {
+			localStorage.setItem(STORAGE_KEY, mode);
+		} catch {}
+	}, [locale, mode]);
+	const messages = MESSAGES[locale];
+	const t = (0, import_react.useCallback)((key, vars) => {
+		const raw = getByPath(messages, key);
+		if (typeof raw === "string") return interpolate(raw, vars);
+		const fallback = getByPath(MESSAGES.en, key);
+		if (typeof fallback === "string") return interpolate(fallback, vars);
+		return key;
+	}, [messages]);
+	const setMode = (0, import_react.useCallback)((m) => setModeState(m), []);
+	const value = (0, import_react.useMemo)(() => ({
+		mode,
+		locale,
+		messages,
+		setMode,
+		t
+	}), [
+		mode,
+		locale,
+		messages,
+		setMode,
+		t
+	]);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(I18nContext.Provider, {
+		value,
+		children
+	});
+}
+function useI18n() {
+	const ctx = (0, import_react.useContext)(I18nContext);
+	if (!ctx) throw new Error("useI18n must be used within <I18nProvider>");
+	return ctx;
+}
+/** 便捷 hook：只取 t */
+function useT() {
+	return useI18n().t;
+}
 //#endregion
 //#region webui/src/components/Toolbar.tsx
-var THEME_OPTIONS = [
-	{
-		value: "system",
-		label: "跟随系统"
-	},
-	{
-		value: "light",
-		label: "亮"
-	},
-	{
-		value: "dark",
-		label: "暗"
-	}
-];
 function Toolbar({ transport, onTransportChange, onRefresh, loading, error, onGenerateDocs, generatingDocs }) {
 	const { mode, setMode } = useTheme();
+	const { t, mode: localeMode, setMode: setLocaleMode } = useI18n();
+	const themeOptions = [
+		{
+			value: "system",
+			label: t("toolbar.themeSystem")
+		},
+		{
+			value: "light",
+			label: t("toolbar.themeLight")
+		},
+		{
+			value: "dark",
+			label: t("toolbar.themeDark")
+		}
+	];
+	const localeOptions = [
+		{
+			value: "system",
+			label: t("toolbar.languageSystem")
+		},
+		{
+			value: "en",
+			label: t("toolbar.languageEn")
+		},
+		{
+			value: "zh-CN",
+			label: t("toolbar.languageZhCN")
+		},
+		{
+			value: "zh-TW",
+			label: t("toolbar.languageZhTW")
+		},
+		{
+			value: "ja",
+			label: t("toolbar.languageJa")
+		}
+	];
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
 		className: "toolbar",
 		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "JSON-RPC 2.0" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: t("toolbar.title") }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "segmented",
 				role: "group",
-				"aria-label": "传输方式",
+				"aria-label": t("toolbar.transport"),
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
 					className: transport === "http" ? "active" : "",
 					onClick: () => onTransportChange("http"),
-					children: "HTTP"
+					children: t("toolbar.http")
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
 					className: transport === "ws" ? "active" : "",
 					onClick: () => onTransportChange("ws"),
-					children: "WebSocket"
+					children: t("toolbar.ws")
 				})]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 				onClick: onRefresh,
 				disabled: loading,
-				children: loading ? "刷新中…" : "刷新方法列表"
+				children: loading ? t("toolbar.refreshMethodsLoading") : t("toolbar.refreshMethods")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 				onClick: onGenerateDocs,
-				disabled: generatingDocs || loading || loading,
-				title: "拉取所有方法的帮助与签名，生成 Markdown 文档并下载",
-				children: generatingDocs ? "生成中…" : "生成文档 ⬇"
+				disabled: generatingDocs || loading,
+				title: t("toolbar.generateDocsTitle"),
+				children: generatingDocs ? t("toolbar.generateDocsLoading") : t("toolbar.generateDocs")
 			}),
 			error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 				className: "error",
@@ -8316,14 +9074,29 @@ function Toolbar({ transport, onTransportChange, onRefresh, loading, error, onGe
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
 				className: "theme-select",
-				title: "主题",
+				title: t("toolbar.language"),
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 					className: "theme-select-label",
-					children: "主题"
+					children: t("toolbar.language")
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+					value: localeMode,
+					onChange: (e) => setLocaleMode(e.target.value),
+					children: localeOptions.map((opt) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+						value: opt.value,
+						children: opt.label
+					}, opt.value))
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+				className: "theme-select",
+				title: t("toolbar.theme"),
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "theme-select-label",
+					children: t("toolbar.theme")
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
 					value: mode,
 					onChange: (e) => setMode(e.target.value),
-					children: THEME_OPTIONS.map((opt) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+					children: themeOptions.map((opt) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
 						value: opt.value,
 						children: opt.label
 					}, opt.value))
@@ -8370,10 +9143,11 @@ function buildTree(methods) {
 	return root.children;
 }
 function MethodTree({ methods, selected, onSelect }) {
+	const t = useT();
 	const tree = (0, import_react.useMemo)(() => buildTree(methods), [methods]);
 	if (methods.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 		className: "empty",
-		children: "暂无可用方法。"
+		children: t("sidebar.noMethods")
 	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 		className: "tree",
@@ -8443,6 +9217,7 @@ function formatConstraints$1(constraints) {
 	return entries.map(([k, v]) => `${k}=${typeof v === "string" ? JSON.stringify(v) : JSON.stringify(v)}`).join(", ");
 }
 function SchemaNode({ schema, depth, defaultOpen, label }) {
+	const t = useT();
 	const [open, setOpen] = (0, import_react.useState)(defaultOpen);
 	const hasChildren = schema.children && Object.keys(schema.children).length > 0;
 	const constraintsText = formatConstraints$1(schema.constraints);
@@ -8490,17 +9265,18 @@ function SchemaNode({ schema, depth, defaultOpen, label }) {
 			]
 		}), open && hasChildren && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 			className: "schema-children",
-			children: renderChildren(schema, depth + 1)
+			children: renderChildren(schema, depth + 1, t)
 		})]
 	});
 }
-function renderChildren(schema, depth) {
+function renderChildren(schema, depth, t) {
 	const c = schema.children ?? {};
 	const out = [];
 	if (c.inner && isSchemaDescription(c.inner)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
 		schema: c.inner,
 		depth,
-		defaultOpen: true
+		defaultOpen: true,
+		label: t("schema.inner")
 	}, "inner"));
 	if (Array.isArray(c.items)) c.items.forEach((item, i) => {
 		if (isSchemaDescription(item)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
@@ -8514,14 +9290,14 @@ function renderChildren(schema, depth) {
 		schema: c.items,
 		depth,
 		defaultOpen: true,
-		label: "items"
+		label: t("schema.items")
 	}, "items"));
 	if (Array.isArray(c.options)) c.options.forEach((opt, i) => {
 		if (isSchemaDescription(opt)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
 			schema: opt,
 			depth,
 			defaultOpen: false,
-			label: `option[${i}]`
+			label: t("schema.optionIndex", { index: i })
 		}, `opt-${i}`));
 	});
 	if (c.properties && typeof c.properties === "object" && !Array.isArray(c.properties)) {
@@ -8536,7 +9312,7 @@ function renderChildren(schema, depth) {
 		schema: c.values,
 		depth,
 		defaultOpen: true,
-		label: "values"
+		label: t("schema.values")
 	}, "values"));
 	return out;
 }
@@ -8553,11 +9329,12 @@ function SchemaView({ schema, defaultOpen = true, depth = 0 }) {
 //#endregion
 //#region webui/src/components/MethodDetail.tsx
 function MethodDetail({ method, detail }) {
+	const t = useT();
 	if (!method) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
 		className: "detail",
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "hint",
-			children: "← 从左侧选择一个方法查看帮助与签名。"
+			children: t("method.selectHint")
 		})
 	});
 	const [returnSchema] = detail.signature;
@@ -8567,23 +9344,23 @@ function MethodDetail({ method, detail }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: method }),
 			detail.loading && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "hint",
-				children: "加载中…"
+				children: t("method.loading")
 			}),
-			detail.error && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+			detail.error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "error",
-				children: ["加载失败：", detail.error]
+				children: t("method.loadFailed", { error: detail.error })
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "Help" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: t("method.help") }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
 				className: "help",
-				children: detail.help || "（无帮助信息）"
+				children: detail.help || t("method.noHelp")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: [
-				"返回类型",
+				t("method.returnType"),
 				" ",
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 					className: "hint",
-					children: "（服务端不会校验执行结果是否符合此类型，实际返回值可能会有所不同）"
+					children: t("method.returnTypeHint")
 				})
 			] }),
 			returnSchema ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaView, {
@@ -8592,7 +9369,7 @@ function MethodDetail({ method, detail }) {
 				defaultOpen: true
 			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "hint",
-				children: "（暂无）"
+				children: t("method.none")
 			})
 		]
 	});
@@ -8666,9 +9443,10 @@ function formatConstraints(c) {
 	return Object.entries(c).filter(([, v]) => v !== void 0).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ");
 }
 function SchemaForm({ params, values, onChange, disabled }) {
+	const t = useT();
 	if (params.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 		className: "hint",
-		children: "此方法无需参数。"
+		children: t("test.noParams")
 	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		className: "schema-form",
@@ -8676,13 +9454,14 @@ function SchemaForm({ params, values, onChange, disabled }) {
 			schema,
 			value: values[i],
 			onChange: (v) => onChange(i, v),
-			label: `参数 [${i}]`,
+			label: t("schema.paramIndex", { index: i }),
 			depth: 0,
 			disabled
 		}, i))
 	});
 }
 function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = true, disabled }) {
+	const t = useT();
 	const [open, setOpen] = (0, import_react.useState)(defaultOpen);
 	const kind = schema.kind;
 	if (schema.nullable) {
@@ -8704,7 +9483,7 @@ function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = 
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 						className: "sf-nullable-badge",
-						children: "nullable"
+						children: t("schema.nullable")
 					}),
 					schema.description && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 						className: "sf-desc",
@@ -8715,7 +9494,7 @@ function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = 
 						className: "tiny",
 						disabled,
 						onClick: () => onChange(null),
-						children: "置 null"
+						children: t("schema.setNull")
 					}),
 					isNull && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
@@ -8725,7 +9504,7 @@ function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = 
 							...schema,
 							nullable: false
 						})),
-						children: "填值"
+						children: t("schema.fillValue")
 					})
 				]
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
@@ -8862,6 +9641,7 @@ function isScalarKind(kind) {
 	return kind === "string" || kind === "number" || kind === "boolean" || kind === "enum" || kind === "literal" || kind === "null";
 }
 function ScalarInput({ schema, value, onChange, disabled }) {
+	const t = useT();
 	switch (schema.kind) {
 		case "boolean": return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
 			className: "sf-scalar",
@@ -8899,7 +9679,7 @@ function ScalarInput({ schema, value, onChange, disabled }) {
 				children: JSON.stringify(schema.constraints?.value ?? null)
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 				className: "hint",
-				children: "（固定值）"
+				children: t("schema.fixedValue")
 			})]
 		});
 		case "null": return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -8909,7 +9689,7 @@ function ScalarInput({ schema, value, onChange, disabled }) {
 				children: "null"
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 				className: "hint",
-				children: "（固定值）"
+				children: t("schema.fixedValue")
 			})]
 		});
 		default: return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
@@ -8922,11 +9702,12 @@ function ScalarInput({ schema, value, onChange, disabled }) {
 	}
 }
 function UnionField({ options, value, onChange, depth, disabled }) {
+	const t = useT();
 	const [selected, setSelected] = (0, import_react.useState)(0);
 	const active = options[selected];
 	if (!active) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 		className: "hint",
-		children: "（union 无分支）"
+		children: t("schema.unionNoBranch")
 	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		style: { paddingLeft: depth * 14 },
@@ -8945,9 +9726,8 @@ function UnionField({ options, value, onChange, depth, disabled }) {
 				children: options.map((opt, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", {
 					value: i,
 					children: [
-						"option[",
-						i,
-						"] — ",
+						t("schema.optionIndex", { index: i }),
+						" — ",
 						opt.kind
 					]
 				}, i))
@@ -8963,12 +9743,13 @@ function UnionField({ options, value, onChange, depth, disabled }) {
 	});
 }
 function ContainerChildren({ schema, value, onChange, depth, disabled }) {
+	const t = useT();
 	const c = schema.children ?? {};
 	if (schema.kind === "array") {
 		const itemSchema = isSchema$1(c.items) ? c.items : void 0;
 		if (!itemSchema) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "hint",
-			children: "（数组无 item schema）"
+			children: t("schema.arrayNoItem")
 		});
 		const arr = Array.isArray(value) ? value : [];
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [arr.map((item, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -8990,14 +9771,14 @@ function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 				className: "tiny",
 				disabled,
 				onClick: () => onChange(arr.filter((_, j) => j !== i)),
-				children: "删除"
+				children: t("common.delete")
 			})]
 		}, i)), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 			type: "button",
 			className: "tiny",
 			disabled,
 			onClick: () => onChange([...arr, sampleFromSchema(itemSchema)]),
-			children: "+ 添加项"
+			children: t("schema.addItem")
 		})] });
 	}
 	if (schema.kind === "tuple") {
@@ -9043,14 +9824,14 @@ function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 				paddingLeft: depth * 14,
 				margin: "4px 0"
 			},
-			children: "（非 strict 模式，允许额外字段）"
+			children: t("schema.strictHint")
 		})] });
 	}
 	if (schema.kind === "record") {
 		const valueSchema = isSchema$1(c.values) ? c.values : void 0;
 		if (!valueSchema) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "hint",
-			children: "（record 无 value schema）"
+			children: t("schema.recordNoValue")
 		});
 		const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [Object.entries(obj).map(([key, v]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -9075,7 +9856,7 @@ function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 					delete next[key];
 					onChange(next);
 				},
-				children: "删除"
+				children: t("common.delete")
 			})]
 		}, key)), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AddRecordKey, {
 			onAdd: (key, v) => onChange({
@@ -9089,12 +9870,13 @@ function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 	return null;
 }
 function AddRecordKey({ onAdd, sample, disabled }) {
+	const t = useT();
 	const [key, setKey] = (0, import_react.useState)("");
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "sf-record-add",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 			className: "sf-input",
-			placeholder: "新键名",
+			placeholder: t("schema.recordAddPlaceholder"),
 			value: key,
 			onChange: (e) => setKey(e.target.value),
 			disabled
@@ -9106,11 +9888,12 @@ function AddRecordKey({ onAdd, sample, disabled }) {
 				onAdd(key, sample());
 				setKey("");
 			},
-			children: "+ 添加键"
+			children: t("schema.addRecordKey")
 		})]
 	});
 }
 function UnknownLeaf({ schema, value, onChange, label, depth, disabled }) {
+	const t = useT();
 	const [text, setText] = (0, import_react.useState)(() => JSON.stringify(value ?? null, null, 2));
 	const [error, setError] = (0, import_react.useState)(null);
 	const commit = (next) => {
@@ -9152,9 +9935,9 @@ function UnknownLeaf({ schema, value, onChange, label, depth, disabled }) {
 				value: text,
 				disabled,
 				onChange: (e) => commit(e.target.value)
-			}), error && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+			}), error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 				className: "error small",
-				children: ["JSON 错误：", error]
+				children: t("test.jsonError", { error })
 			})]
 		})]
 	});
@@ -9168,26 +9951,27 @@ function Constraints({ schema }) {
 }
 //#endregion
 //#region webui/src/components/TestPanel.tsx
-var COPY_OPTIONS = [
-	{
-		value: "curl",
-		label: "复制 curl (bash)"
-	},
-	{
-		value: "curl-cmd",
-		label: "复制 curl (cmd)"
-	},
-	{
-		value: "fetch",
-		label: "复制 fetch"
-	}
-];
 /** 格式化耗时：<1s 用 ms，否则用 s */
 function formatElapsed(ms) {
 	if (ms < 1e3) return `${ms.toFixed(0)} ms`;
 	return `${(ms / 1e3).toFixed(2)} s`;
 }
 function TestPanel({ method, detail, rpc, transport, endpoint }) {
+	const t = useT();
+	const COPY_OPTIONS = [
+		{
+			value: "curl",
+			label: t("test.copyCurl")
+		},
+		{
+			value: "curl-cmd",
+			label: t("test.copyCurlCmd")
+		},
+		{
+			value: "fetch",
+			label: t("test.copyFetch")
+		}
+	];
 	const paramSchemas = (0, import_react.useMemo)(() => detail.signature.slice(1), [detail.signature]);
 	const isStreamReturn = detail.signature[0]?.kind === "stream";
 	const [values, setValues] = (0, import_react.useState)([]);
@@ -9245,8 +10029,11 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 					setOutput(lines.join("\n"));
 				}
 				const totalAt = performance.now() - startedAt;
-				if (idx === 0) lines.push(`（流已结束，无数据，总耗时 ${formatElapsed(totalAt)}）`);
-				else lines.push(`（流已结束，共 ${idx} 帧，总耗时 ${formatElapsed(totalAt)}）`);
+				if (idx === 0) lines.push(t("test.streamEndedEmpty", { duration: formatElapsed(totalAt) }));
+				else lines.push(t("test.streamEnded", {
+					count: idx,
+					duration: formatElapsed(totalAt)
+				}));
 				setOutput(lines.join("\n"));
 				setElapsed({
 					total: totalAt,
@@ -9288,24 +10075,20 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 			setCopied(true);
 			setTimeout(() => setCopied(false), 2e3);
 		} catch (e) {
-			setCopyError(`复制失败：${e instanceof Error ? e.message : String(e)}`);
+			setCopyError(t("common.copyFailed", { error: e instanceof Error ? e.message : String(e) }));
 		}
 	};
 	const canCopy = transport === "http";
-	const currentLabel = COPY_OPTIONS.find((o) => o.value === copyKind)?.label ?? "复制";
+	const currentLabel = COPY_OPTIONS.find((o) => o.value === copyKind)?.label ?? t("common.copy");
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "test",
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: [
-				"参数",
+				t("test.params"),
 				" ",
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 					className: "hint",
-					children: [
-						"（",
-						paramSchemas.length,
-						" 个，按签名自动生成）"
-					]
+					children: t("test.paramsHint", { count: paramSchemas.length })
 				})
 			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaForm, {
@@ -9320,7 +10103,7 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						onClick: execute,
 						disabled: !method || running,
-						children: running ? isStreamReturn ? "接收中…" : "执行中…" : isStreamReturn ? "执行并接收流 ▶" : "执行 ▶"
+						children: running ? isStreamReturn ? t("test.receiving") : t("test.executing") : isStreamReturn ? t("test.executeStream") : t("test.execute")
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "split-button",
@@ -9331,8 +10114,8 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 								className: "split-button-main",
 								onClick: () => void copyAs(copyKind),
 								disabled: !method || !canCopy,
-								title: canCopy ? "复制当前调用的等价代码" : "仅 HTTP 传输可生成代码",
-								children: copied ? "已复制 ✓" : currentLabel
+								title: canCopy ? t("test.copyTitle") : t("test.copyDisabledTitle"),
+								children: copied ? t("common.copied") : currentLabel
 							}),
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 								type: "button",
@@ -9341,7 +10124,7 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 								disabled: !method || !canCopy,
 								"aria-haspopup": "menu",
 								"aria-expanded": menuOpen,
-								title: "选择复制格式",
+								title: t("test.chooseFormat"),
 								children: "▾"
 							}),
 							menuOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
@@ -9369,7 +10152,7 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						onClick: () => setValues(paramSchemas.map(sampleFromSchema)),
 						disabled: !method,
-						children: "重置为示例"
+						children: t("test.resetToSample")
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						onClick: () => {
@@ -9377,15 +10160,15 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 							setElapsed(null);
 						},
 						disabled: !output && !elapsed,
-						children: "清空输出"
+						children: t("test.clearOutput")
 					})
 				]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: [
-				"结果",
+				t("test.result"),
 				isStreamReturn && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 					className: "hint",
-					children: "（流式）"
+					children: t("test.resultStream")
 				}),
 				elapsed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 					className: "elapsed-badge",
@@ -9397,7 +10180,9 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 							className: "hint",
 							children: [
 								" ",
-								"· 首帧 ",
+								"· ",
+								t("test.firstFrame"),
+								" ",
 								formatElapsed(elapsed.firstFrame)
 							]
 						})
@@ -9407,7 +10192,7 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
 				className: "output",
 				ref: outRef,
-				children: output || "（尚未执行）"
+				children: output || t("test.notExecuted")
 			})
 		]
 	});
@@ -9489,6 +10274,7 @@ function rateClass(v) {
 	return "rate-cold";
 }
 function MetricsPanel({ snapshot, previous, fetchedAt, loading, error, available, onRefresh, autoRefresh, onAutoRefreshChange, intervalMs, onIntervalChange }) {
+	const t = useT();
 	const derived = (0, import_react.useMemo)(() => {
 		if (!snapshot) return [];
 		const dtSeconds = previous && fetchedAt ? (fetchedAt - previous.fetchedAt) / 1e3 : void 0;
@@ -9530,15 +10316,9 @@ function MetricsPanel({ snapshot, previous, fetchedAt, loading, error, available
 	}, [snapshot]);
 	if (!available) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "metrics",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Metrics" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: t("metrics.title") }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "hint",
-			children: [
-				"服务端未启用 ",
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "system.metrics" }),
-				"（",
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "withSystemMethods: false" }),
-				" 或未注册）。"
-			]
+			children: t("metrics.unavailable")
 		})]
 	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
@@ -9546,7 +10326,7 @@ function MetricsPanel({ snapshot, previous, fetchedAt, loading, error, available
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
 				className: "metrics-header",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Metrics" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: t("metrics.title") }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "metrics-controls",
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
@@ -9555,14 +10335,14 @@ function MetricsPanel({ snapshot, previous, fetchedAt, loading, error, available
 								type: "checkbox",
 								checked: autoRefresh,
 								onChange: (e) => onAutoRefreshChange(e.target.checked)
-							}), "自动刷新"]
+							}), t("metrics.autoRefresh")]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
 							className: "sf-input",
 							value: intervalMs,
 							onChange: (e) => onIntervalChange(Number(e.target.value)),
 							disabled: !autoRefresh,
-							title: "刷新间隔",
+							title: t("metrics.interval"),
 							children: [
 								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
 									value: 1e3,
@@ -9585,11 +10365,15 @@ function MetricsPanel({ snapshot, previous, fetchedAt, loading, error, available
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 							onClick: onRefresh,
 							disabled: loading,
-							children: loading ? "刷新中…" : "立即刷新"
+							children: loading ? t("metrics.refreshing") : t("metrics.refreshNow")
 						}),
 						snapshot && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 							className: "hint",
-							children: ["uptime ", formatDuration(snapshot.uptimeMs / 1e3)]
+							children: [
+								t("metrics.uptime"),
+								" ",
+								formatDuration(snapshot.uptimeMs / 1e3)
+							]
 						})
 					]
 				})]
@@ -9600,64 +10384,56 @@ function MetricsPanel({ snapshot, previous, fetchedAt, loading, error, available
 			}),
 			!snapshot && !error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "hint",
-				children: "加载中…"
+				children: t("metrics.loading")
 			}),
 			snapshot && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "metrics-cards",
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
-							label: "Methods",
+							label: t("metrics.methods"),
 							value: String(totals.methods)
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
-							label: "Calls",
+							label: t("metrics.calls"),
 							value: String(totals.calls)
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
-							label: "Streams",
+							label: t("metrics.streams"),
 							value: String(totals.streams)
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
-							label: "Errors",
+							label: t("metrics.errors"),
 							value: String(totals.errors),
 							tone: totals.errors > 0 ? "danger" : void 0
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
-							label: "Error rate",
+							label: t("metrics.errorRate"),
 							value: totals.calls > 0 ? formatPercent(totals.errors / totals.calls) : "—",
 							tone: totals.calls > 0 && totals.errors / totals.calls > .05 ? "danger" : void 0
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MetricCard, {
-							label: "Invalid requests",
+							label: t("metrics.invalidRequests"),
 							value: String(snapshot.invalidRequests),
 							tone: snapshot.invalidRequests > 0 ? "warn" : void 0
 						})
 					]
 				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: ["Non-stream methods", /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: [t("metrics.nonStreamTitle"), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 					className: "hint",
-					children: [
-						" （",
-						nonStreamMethods.length,
-						"）"
-					]
+					children: [" ", t("metrics.countHint", { count: nonStreamMethods.length })]
 				})] }),
 				nonStreamMethods.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "hint",
-					children: "暂无数据。"
+					children: t("metrics.noData")
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NonStreamTable, { rows: nonStreamMethods }),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: ["Stream methods", /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: [t("metrics.streamTitle"), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 					className: "hint",
-					children: [
-						" （",
-						streamMethods.length,
-						"）"
-					]
+					children: [" ", t("metrics.countHint", { count: streamMethods.length })]
 				})] }),
 				streamMethods.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "hint",
-					children: "暂无流式调用。"
+					children: t("metrics.noStreams")
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StreamTable, { rows: streamMethods })
 			] })
 		]
@@ -9676,41 +10452,42 @@ function MetricCard({ label, value, tone }) {
 	});
 }
 function NonStreamTable({ rows }) {
+	const t = useT();
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
 		className: "metrics-table",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "method" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: t("metrics.colMethod") }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "calls"
+				children: t("metrics.colCalls")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "rate/s"
+				children: t("metrics.colRate")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "errors"
+				children: t("metrics.colErrors")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "err%"
+				children: t("metrics.colErrPct")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "p50"
+				children: t("metrics.colP50")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "p95"
+				children: t("metrics.colP95")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "p99"
+				children: t("metrics.colP99")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "avg"
+				children: t("metrics.colAvg")
 			})
 		] }) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: rows.map((r) => {
 			const errorCount = Object.values(r.stats.errorsByCode).reduce((a, b) => a + b, 0);
@@ -9758,49 +10535,50 @@ function NonStreamTable({ rows }) {
 	});
 }
 function StreamTable({ rows }) {
+	const t = useT();
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
 		className: "metrics-table",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "method" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: t("metrics.colMethod") }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "opened"
+				children: t("metrics.colOpened")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "completed"
+				children: t("metrics.colCompleted")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "failed"
+				children: t("metrics.colFailed")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "aborted"
+				children: t("metrics.colAborted")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "complete%"
+				children: t("metrics.colCompletePct")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "abort%"
+				children: t("metrics.colAbortPct")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "avg chunks"
+				children: t("metrics.colAvgChunks")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "ttfb p50"
+				children: t("metrics.colTtfbP50")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "ttfb p95"
+				children: t("metrics.colTtfbP95")
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
 				className: "num",
-				children: "duration avg"
+				children: t("metrics.colDurationAvg")
 			})
 		] }) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: rows.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
@@ -9856,11 +10634,12 @@ function StreamTable({ rows }) {
 var NPM_URL = "https://www.npmjs.com/package/@yuhere/js-jsonrpc2/";
 var GITHUB_URL = "https://github.com/yuhere/js-jsonrpc2";
 function Footer() {
+	const t = useT();
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("footer", {
 		className: "footer",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 			className: "footer-version",
-			title: "当前构建版本",
+			title: t("footer.version"),
 			children: ["v", "2.1.12"]
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "footer-links",
@@ -9869,8 +10648,8 @@ function Footer() {
 				href: NPM_URL,
 				target: "_blank",
 				rel: "noopener noreferrer",
-				title: "在 npm 上查看 @yuhere/js-jsonrpc2",
-				"aria-label": "npm package",
+				title: t("footer.npm"),
+				"aria-label": t("footer.npm"),
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
 					viewBox: "0 0 18 7",
 					width: "36",
@@ -9891,8 +10670,8 @@ function Footer() {
 				href: GITHUB_URL,
 				target: "_blank",
 				rel: "noopener noreferrer",
-				title: "在 GitHub 上查看 yuhere/js-jsonrpc2",
-				"aria-label": "GitHub repository",
+				title: t("footer.github"),
+				"aria-label": t("footer.github"),
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("svg", {
 					viewBox: "0 0 16 16",
 					width: "16",
@@ -10069,6 +10848,7 @@ function downloadText(filename, text, mime = "text/plain") {
 //#region webui/src/App.tsx
 var ENDPOINT = "";
 function App() {
+	const { t } = useI18n();
 	const [transport, setTransport] = (0, import_react.useState)("http");
 	const [selected, setSelected] = (0, import_react.useState)("");
 	const [generatingDocs, setGeneratingDocs] = (0, import_react.useState)(false);
@@ -10098,7 +10878,7 @@ function App() {
 	}, [metrics.snapshot, metricsQuery]);
 	const generateDocs = (0, import_react.useCallback)(async () => {
 		if (methods.length === 0) {
-			alert("方法列表为空，请先刷新方法列表。");
+			alert(t("alerts.emptyMethods"));
 			return;
 		}
 		setGeneratingDocs(true);
@@ -10106,11 +10886,15 @@ function App() {
 			const md = renderMarkdown(await collectApiDoc(rpc, methods));
 			downloadText(`jsonrpc-api-doc-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-").slice(0, 19)}.md`, md, "text/markdown");
 		} catch (e) {
-			alert(`生成文档失败：${e instanceof Error ? e.message : String(e)}`);
+			alert(t("alerts.docsFailed", { error: e instanceof Error ? e.message : String(e) }));
 		} finally {
 			setGeneratingDocs(false);
 		}
-	}, [rpc, methods]);
+	}, [
+		rpc,
+		methods,
+		t
+	]);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "app",
 		children: [
@@ -10128,49 +10912,46 @@ function App() {
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "view-switch segmented",
 					role: "group",
-					"aria-label": "视图",
+					"aria-label": t("view.label"),
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
 						className: view === "methods" ? "active" : "",
 						onClick: () => setView("methods"),
-						children: "Methods"
+						children: t("view.methods")
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
 						className: view === "metrics" ? "active" : "",
 						onClick: () => setView("metrics"),
-						children: "Metrics"
+						children: t("view.metrics")
 					})]
 				}), view === "methods" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "metrics-sidebar",
 					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Methods" }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: t("sidebar.methods") }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
 							className: "metrics-filter",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "metrics-filter-label",
-								children: "Search"
+								children: t("sidebar.search")
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 								className: "sf-input",
 								type: "text",
-								placeholder: "输入关键词，空格分隔",
+								placeholder: t("sidebar.searchPlaceholder"),
 								value: methodSearch,
 								onChange: (e) => setMethodSearch(e.target.value),
 								spellCheck: false
 							})]
 						}),
-						!methodQuery.passthrough && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						!methodQuery.passthrough && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "hint metrics-filter-stat",
-							children: [
-								"匹配 ",
-								filteredMethods.length,
-								" / ",
-								methods.length,
-								" 个方法"
-							]
+							children: t("sidebar.matchCount", {
+								matched: filteredMethods.length,
+								total: methods.length
+							})
 						}),
 						filteredMethods.length === 0 && methods.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "empty",
-							children: "没有匹配的方法。"
+							children: t("sidebar.noMatch")
 						}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MethodTree, {
 							methods: filteredMethods,
 							selected,
@@ -10180,31 +10961,27 @@ function App() {
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "metrics-sidebar",
 					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Metrics" }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: t("sidebar.metrics") }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
 							className: "metrics-filter",
 							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "metrics-filter-label",
-								children: "Search"
+								children: t("sidebar.search")
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
 								className: "sf-input",
 								type: "text",
-								placeholder: "输入关键词，空格分隔",
+								placeholder: t("sidebar.searchPlaceholder"),
 								value: metricsSearch,
 								onChange: (e) => setMetricsSearch(e.target.value),
 								spellCheck: false
 							})]
 						}),
-						metrics.snapshot && !metricsQuery.passthrough && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						metrics.snapshot && !metricsQuery.passthrough && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "hint metrics-filter-stat",
-							children: [
-								"匹配 ",
-								Object.keys(filteredMetrics?.methods ?? {}).length,
-								" /",
-								" ",
-								Object.keys(metrics.snapshot.methods).length,
-								" 个方法"
-							]
+							children: t("sidebar.matchCount", {
+								matched: Object.keys(filteredMetrics?.methods ?? {}).length,
+								total: Object.keys(metrics.snapshot.methods).length
+							})
 						})
 					]
 				})]
@@ -10239,7 +11016,7 @@ function App() {
 }
 //#endregion
 //#region webui/src/main.tsx
-import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }));
+import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(I18nProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }) }));
 //#endregion
 
-//# sourceMappingURL=index-vDCgC9ya.js.map
+//# sourceMappingURL=index-B9mu5mWP.js.map

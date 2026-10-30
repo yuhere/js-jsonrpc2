@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { SchemaDescription } from '../api/schema';
 import { isSchema, sampleFromSchema } from '../api/paramForm';
+import { useT } from '../i18n/I18nProvider';
 
 // ─────────────────────────────────────────────────────────────
 // 视觉常量
@@ -47,8 +48,10 @@ export interface SchemaFormProps {
 }
 
 export function SchemaForm({ params, values, onChange, disabled }: SchemaFormProps) {
+    const t = useT();
+
     if (params.length === 0) {
-        return <p className="hint">此方法无需参数。</p>;
+        return <p className="hint">{t('test.noParams')}</p>;
     }
     return (
         <div className="schema-form">
@@ -58,7 +61,7 @@ export function SchemaForm({ params, values, onChange, disabled }: SchemaFormPro
                     schema={schema}
                     value={values[i]}
                     onChange={(v) => onChange(i, v)}
-                    label={`参数 [${i}]`}
+                    label={t('schema.paramIndex', { index: i })}
                     depth={0}
                     disabled={disabled}
                 />
@@ -90,6 +93,7 @@ function SchemaField({
     defaultOpen = true,
     disabled,
 }: SchemaFieldProps) {
+    const t = useT();
     const [open, setOpen] = useState(defaultOpen);
     const kind = schema.kind;
 
@@ -103,7 +107,7 @@ function SchemaField({
                     <span className="sf-kind" style={{ color: colorOf(kind) }}>
                         {kind}
                     </span>
-                    <span className="sf-nullable-badge">nullable</span>
+                    <span className="sf-nullable-badge">{t('schema.nullable')}</span>
                     {schema.description && (
                         <span className="sf-desc">— {schema.description}</span>
                     )}
@@ -114,7 +118,7 @@ function SchemaField({
                             disabled={disabled}
                             onClick={() => onChange(null)}
                         >
-                            置 null
+                            {t('schema.setNull')}
                         </button>
                     )}
                     {isNull && (
@@ -131,7 +135,7 @@ function SchemaField({
                                 )
                             }
                         >
-                            填值
+                            {t('schema.fillValue')}
                         </button>
                     )}
                 </div>
@@ -285,6 +289,8 @@ function ScalarInput({
     onChange: (v: unknown) => void;
     disabled?: boolean;
 }) {
+    const t = useT();
+
     switch (schema.kind) {
         case 'boolean':
             return (
@@ -335,14 +341,14 @@ function ScalarInput({
                     <code className="literal-value">
                         {JSON.stringify(schema.constraints?.value ?? null)}
                     </code>
-                    <span className="hint">（固定值）</span>
+                    <span className="hint">{t('schema.fixedValue')}</span>
                 </div>
             );
         case 'null':
             return (
                 <div className="sf-scalar">
                     <code className="literal-value">null</code>
-                    <span className="hint">（固定值）</span>
+                    <span className="hint">{t('schema.fixedValue')}</span>
                 </div>
             );
         default:
@@ -376,10 +382,11 @@ function UnionField({
     depth: number;
     disabled?: boolean;
 }) {
+    const t = useT();
     const [selected, setSelected] = useState(0);
     const active = options[selected];
     if (!active) {
-        return <p className="hint">（union 无分支）</p>;
+        return <p className="hint">{t('schema.unionNoBranch')}</p>;
     }
     return (
         <div style={{ paddingLeft: depth * 14 }}>
@@ -397,7 +404,7 @@ function UnionField({
                 >
                     {options.map((opt, i) => (
                         <option key={i} value={i}>
-                            option[{i}] — {opt.kind}
+                            {t('schema.optionIndex', { index: i })} — {opt.kind}
                         </option>
                     ))}
                 </select>
@@ -431,12 +438,13 @@ function ContainerChildren({
     depth: number;
     disabled?: boolean;
 }) {
+    const t = useT();
     const c = schema.children ?? {};
 
     // array
     if (schema.kind === 'array') {
         const itemSchema = isSchema(c.items) ? c.items : undefined;
-        if (!itemSchema) return <p className="hint">（数组无 item schema）</p>;
+        if (!itemSchema) return <p className="hint">{t('schema.arrayNoItem')}</p>;
         const arr = Array.isArray(value) ? value : [];
         return (
             <div>
@@ -461,7 +469,7 @@ function ContainerChildren({
                             disabled={disabled}
                             onClick={() => onChange(arr.filter((_, j) => j !== i))}
                         >
-                            删除
+                            {t('common.delete')}
                         </button>
                     </div>
                 ))}
@@ -471,7 +479,7 @@ function ContainerChildren({
                     disabled={disabled}
                     onClick={() => onChange([...arr, sampleFromSchema(itemSchema)])}
                 >
-                    + 添加项
+                    {t('schema.addItem')}
                 </button>
             </div>
         );
@@ -540,7 +548,7 @@ function ContainerChildren({
                         className="hint"
                         style={{ paddingLeft: depth * 14, margin: '4px 0' }}
                     >
-                        （非 strict 模式，允许额外字段）
+                        {t('schema.strictHint')}
                     </p>
                 )}
             </div>
@@ -550,7 +558,7 @@ function ContainerChildren({
     // record
     if (schema.kind === 'record') {
         const valueSchema = isSchema(c.values) ? c.values : undefined;
-        if (!valueSchema) return <p className="hint">（record 无 value schema）</p>;
+        if (!valueSchema) return <p className="hint">{t('schema.recordNoValue')}</p>;
         const obj =
             value && typeof value === 'object' && !Array.isArray(value)
                 ? (value as Record<string, unknown>)
@@ -578,7 +586,7 @@ function ContainerChildren({
                                 onChange(next);
                             }}
                         >
-                            删除
+                            {t('common.delete')}
                         </button>
                     </div>
                 ))}
@@ -603,12 +611,13 @@ function AddRecordKey({
     sample: () => unknown;
     disabled?: boolean;
 }) {
+    const t = useT();
     const [key, setKey] = useState('');
     return (
         <div className="sf-record-add">
             <input
                 className="sf-input"
-                placeholder="新键名"
+                placeholder={t('schema.recordAddPlaceholder')}
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
                 disabled={disabled}
@@ -622,7 +631,7 @@ function AddRecordKey({
                     setKey('');
                 }}
             >
-                + 添加键
+                {t('schema.addRecordKey')}
             </button>
         </div>
     );
@@ -647,6 +656,7 @@ function UnknownLeaf({
     depth: number;
     disabled?: boolean;
 }) {
+    const t = useT();
     const [text, setText] = useState(() => JSON.stringify(value ?? null, null, 2));
     const [error, setError] = useState<string | null>(null);
 
@@ -681,7 +691,11 @@ function UnknownLeaf({
                     disabled={disabled}
                     onChange={(e) => commit(e.target.value)}
                 />
-                {error && <span className="error small">JSON 错误：{error}</span>}
+                {error && (
+                    <span className="error small">
+                        {t('test.jsonError', { error })}
+                    </span>
+                )}
             </div>
         </div>
     );

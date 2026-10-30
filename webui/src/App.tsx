@@ -11,6 +11,7 @@ import { TestPanel } from './components/TestPanel';
 import { MetricsPanel } from './components/MetricsPanel';
 import { Footer } from './components/Footer';
 import { compileFuzzyQuery, filterFuzzyMethods, filterFuzzySnapshotMethods } from './utils/fuzzy';
+import { useI18n } from './i18n/I18nProvider';
 import type { MetricsSnapshot } from './api/metrics';
 import {
     collectApiDoc,
@@ -22,6 +23,8 @@ const ENDPOINT = '';
 type View = 'methods' | 'metrics';
 
 export default function App() {
+    const { t } = useI18n();
+
     const [transport, setTransport] = useState<TransportKind>('http');
     const [selected, setSelected] = useState('');
     const [generatingDocs, setGeneratingDocs] = useState(false);
@@ -63,7 +66,7 @@ export default function App() {
 
     const generateDocs = useCallback(async () => {
         if (methods.length === 0) {
-            alert('方法列表为空，请先刷新方法列表。');
+            alert(t('alerts.emptyMethods'));
             return;
         }
         setGeneratingDocs(true);
@@ -73,11 +76,11 @@ export default function App() {
             const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
             downloadText(`jsonrpc-api-doc-${ts}.md`, md, 'text/markdown');
         } catch (e) {
-            alert(`生成文档失败：${e instanceof Error ? e.message : String(e)}`);
+            alert(t('alerts.docsFailed', { error: e instanceof Error ? e.message : String(e) }));
         } finally {
             setGeneratingDocs(false);
         }
-    }, [rpc, methods]);
+    }, [rpc, methods, t]);
 
     return (
         <div className="app">
@@ -92,32 +95,28 @@ export default function App() {
             />
             <main>
                 <aside className="sidebar">
-                    <div className="view-switch segmented" role="group" aria-label="视图">
+                    <div className="view-switch segmented" role="group" aria-label={t('view.label')}>
                         <button
                             type="button"
                             className={view === 'methods' ? 'active' : ''}
                             onClick={() => setView('methods')}
-                        >
-                            Methods
-                        </button>
+                        >{t('view.methods')}</button>
                         <button
                             type="button"
                             className={view === 'metrics' ? 'active' : ''}
                             onClick={() => setView('metrics')}
-                        >
-                            Metrics
-                        </button>
+                        >{t('view.metrics')}</button>
                     </div>
 
                     {view === 'methods' ? (
                         <div className="metrics-sidebar">
-                            <h2>Methods</h2>
+                            <h2>{t('sidebar.methods')}</h2>
                             <label className="metrics-filter">
-                                <span className="metrics-filter-label">Search</span>
+                                <span className="metrics-filter-label">{t('sidebar.search')}</span>
                                 <input
                                     className="sf-input"
                                     type="text"
-                                    placeholder="输入关键词，空格分隔"
+                                    placeholder={t('sidebar.searchPlaceholder')}
                                     value={methodSearch}
                                     onChange={(e) => setMethodSearch(e.target.value)}
                                     spellCheck={false}
@@ -125,38 +124,38 @@ export default function App() {
                             </label>
                             {!methodQuery.passthrough && (
                                 <p className="hint metrics-filter-stat">
-                                    匹配 {filteredMethods.length} / {methods.length} 个方法
+                                    {t('sidebar.matchCount', {
+                                        matched: filteredMethods.length,
+                                        total: methods.length,
+                                    })}
                                 </p>
                             )}
                             {filteredMethods.length === 0 && methods.length > 0 ? (
-                                <p className="empty">没有匹配的方法。</p>
+                                <p className="empty">{t('sidebar.noMatch')}</p>
                             ) : (
-                                <MethodTree
-                                    methods={filteredMethods}
-                                    selected={selected}
-                                    onSelect={setSelected}
-                                />
+                                <MethodTree methods={filteredMethods} selected={selected} onSelect={setSelected} />
                             )}
                         </div>
                     ) : (
                         <div className="metrics-sidebar">
-                            <h2>Metrics</h2>
+                            <h2>{t('sidebar.metrics')}</h2>
                             <label className="metrics-filter">
-                                <span className="metrics-filter-label">Search</span>
+                                <span className="metrics-filter-label">{t('sidebar.search')}</span>
                                 <input
                                     className="sf-input"
                                     type="text"
-                                    placeholder="输入关键词，空格分隔"
+                                    placeholder={t('sidebar.searchPlaceholder')}
                                     value={metricsSearch}
                                     onChange={(e) => setMetricsSearch(e.target.value)}
                                     spellCheck={false}
                                 />
                             </label>
                             {metrics.snapshot && !metricsQuery.passthrough && (
-                                <p className="hint metrics-filter-stat">
-                                    匹配 {Object.keys(filteredMetrics?.methods ?? {}).length} /{' '}
-                                    {Object.keys(metrics.snapshot.methods).length} 个方法
-                                </p>
+                                <p className="hint metrics-filter-stat">{t('sidebar.matchCount', {
+                                    matched: Object.keys(filteredMetrics?.methods ?? {}).length,
+                                    total: Object.keys(metrics.snapshot.methods).length
+                                })
+                                }</p>
                             )}
                         </div>
                     )}

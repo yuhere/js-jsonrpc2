@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { SchemaDescription } from '../api/schema';
+import { useT } from '../i18n/I18nProvider';
 
 interface SchemaViewProps {
     schema: SchemaDescription;
@@ -39,6 +40,8 @@ function formatConstraints(constraints?: Record<string, unknown>): string {
         .join(', ');
 }
 
+type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
 interface NodeProps {
     schema: SchemaDescription;
     depth: number;
@@ -47,6 +50,7 @@ interface NodeProps {
 }
 
 function SchemaNode({ schema, depth, defaultOpen, label }: NodeProps) {
+    const t = useT();
     const [open, setOpen] = useState(defaultOpen);
     const hasChildren = schema.children && Object.keys(schema.children).length > 0;
     const constraintsText = formatConstraints(schema.constraints);
@@ -74,19 +78,31 @@ function SchemaNode({ schema, depth, defaultOpen, label }: NodeProps) {
                 )}
             </div>
             {open && hasChildren && (
-                <div className="schema-children">{renderChildren(schema, depth + 1)}</div>
+                <div className="schema-children">{renderChildren(schema, depth + 1, t)}</div>
             )}
         </div>
     );
 }
 
-function renderChildren(schema: SchemaDescription, depth: number): React.ReactNode {
+function renderChildren(
+    schema: SchemaDescription,
+    depth: number,
+    t: Translate,
+): React.ReactNode {
     const c = schema.children ?? {};
     const out: React.ReactNode[] = [];
 
     // stream 包装器
     if (c.inner && isSchemaDescription(c.inner)) {
-        out.push(<SchemaNode key="inner" schema={c.inner} depth={depth} defaultOpen />);
+        out.push(
+            <SchemaNode
+                key="inner"
+                schema={c.inner}
+                depth={depth}
+                defaultOpen
+                label={t('schema.inner')}
+            />
+        );
     }
 
     // array / tuple
@@ -105,7 +121,15 @@ function renderChildren(schema: SchemaDescription, depth: number): React.ReactNo
             }
         });
     } else if (c.items && isSchemaDescription(c.items)) {
-        out.push(<SchemaNode key="items" schema={c.items} depth={depth} defaultOpen label="items" />);
+        out.push(
+            <SchemaNode
+                key="items"
+                schema={c.items}
+                depth={depth}
+                defaultOpen
+                label={t('schema.items')}
+            />
+        );
     }
 
     // union
@@ -118,7 +142,7 @@ function renderChildren(schema: SchemaDescription, depth: number): React.ReactNo
                         schema={opt}
                         depth={depth}
                         defaultOpen={false}
-                        label={`option[${i}]`}
+                        label={t('schema.optionIndex', { index: i })}
                     />
                 );
             }
@@ -136,7 +160,15 @@ function renderChildren(schema: SchemaDescription, depth: number): React.ReactNo
 
     // record
     if (c.values && isSchemaDescription(c.values)) {
-        out.push(<SchemaNode key="values" schema={c.values} depth={depth} defaultOpen label="values" />);
+        out.push(
+            <SchemaNode
+                key="values"
+                schema={c.values}
+                depth={depth}
+                defaultOpen
+                label={t('schema.values')}
+            />
+        );
     }
 
     return out;

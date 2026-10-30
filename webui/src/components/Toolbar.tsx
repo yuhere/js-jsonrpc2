@@ -1,5 +1,7 @@
 import type { TransportKind } from '../client';
 import { useTheme, type ThemeMode } from '../theme/ThemeProvider';
+import { useI18n } from '../i18n/I18nProvider';
+import type { LocaleMode } from '../i18n/messages';
 
 interface ToolbarProps {
     transport: TransportKind;
@@ -7,16 +9,9 @@ interface ToolbarProps {
     onRefresh: () => void;
     loading: boolean;
     error: string | null;
-    /** 新增：生成文档 */
     onGenerateDocs: () => void;
     generatingDocs: boolean;
 }
-
-const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
-    { value: 'system', label: '跟随系统' },
-    { value: 'light', label: '亮' },
-    { value: 'dark', label: '暗' },
-];
 
 export function Toolbar({
     transport,
@@ -28,49 +23,78 @@ export function Toolbar({
     generatingDocs,
 }: ToolbarProps) {
     const { mode, setMode } = useTheme();
+    const { t, mode: localeMode, setMode: setLocaleMode } = useI18n();
+
+    const themeOptions: { value: ThemeMode; label: string }[] = [
+        { value: 'system', label: t('toolbar.themeSystem') },
+        { value: 'light', label: t('toolbar.themeLight') },
+        { value: 'dark', label: t('toolbar.themeDark') },
+    ];
+
+    const localeOptions: { value: LocaleMode; label: string }[] = [
+        { value: 'system', label: t('toolbar.languageSystem') },
+        { value: 'en', label: t('toolbar.languageEn') },
+        { value: 'zh-CN', label: t('toolbar.languageZhCN') },
+        { value: 'zh-TW', label: t('toolbar.languageZhTW') },
+        { value: 'ja', label: t('toolbar.languageJa') },
+    ];
 
     return (
         <header className="toolbar">
-            <h1>JSON-RPC 2.0</h1>
+            <h1>{t('toolbar.title')}</h1>
 
-            <div className="segmented" role="group" aria-label="传输方式">
+            <div className="segmented" role="group" aria-label={t('toolbar.transport')}>
                 <button
                     type="button"
                     className={transport === 'http' ? 'active' : ''}
                     onClick={() => onTransportChange('http')}
                 >
-                    HTTP
+                    {t('toolbar.http')}
                 </button>
                 <button
                     type="button"
                     className={transport === 'ws' ? 'active' : ''}
                     onClick={() => onTransportChange('ws')}
                 >
-                    WebSocket
+                    {t('toolbar.ws')}
                 </button>
             </div>
 
             <button onClick={onRefresh} disabled={loading}>
-                {loading ? '刷新中…' : '刷新方法列表'}
+                {loading ? t('toolbar.refreshMethodsLoading') : t('toolbar.refreshMethods')}
             </button>
 
             <button
                 onClick={onGenerateDocs}
-                disabled={generatingDocs || loading || loading /* methods 空时由 App 拦截 */}
-                title="拉取所有方法的帮助与签名，生成 Markdown 文档并下载"
+                disabled={generatingDocs || loading}
+                title={t('toolbar.generateDocsTitle')}
             >
-                {generatingDocs ? '生成中…' : '生成文档 ⬇'}
+                {generatingDocs ? t('toolbar.generateDocsLoading') : t('toolbar.generateDocs')}
             </button>
 
             {error && <span className="error">{error}</span>}
 
-            <label className="theme-select" title="主题">
-                <span className="theme-select-label">主题</span>
+            <label className="theme-select" title={t('toolbar.language')}>
+                <span className="theme-select-label">{t('toolbar.language')}</span>
+                <select
+                    value={localeMode}
+                    onChange={(e) => setLocaleMode(e.target.value as LocaleMode)}
+                >
+                    {localeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                        </option>
+                    ))}
+                </select>
+            </label>
+
+            <label className="theme-select" title={t('toolbar.theme')}>
+                <span className="theme-select-label">{t('toolbar.theme')}</span>
                 <select
                     value={mode}
                     onChange={(e) => setMode(e.target.value as ThemeMode)}
                 >
-                    {THEME_OPTIONS.map((opt) => (
+                    {themeOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                             {opt.label}
                         </option>
