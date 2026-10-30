@@ -52,6 +52,10 @@ describe('Repository.register validation', () => {
             method: 'system.methodHelp',
             params: ['hi'],
             id: 1,
+        }, {
+            injections: {
+                repository: () => repo
+            }
         });
         expect(help).toMatchObject({ result: 'hello' });
     });
@@ -67,6 +71,10 @@ describe('Repository.register validation', () => {
             method: 'system.methodHelp',
             params: ['hi'],
             id: 1,
+        }, {
+            injections: {
+                repository: () => repo
+            }
         });
         expect(help).toMatchObject({ result: 'async-hello' });
     });

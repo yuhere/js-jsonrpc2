@@ -54,7 +54,7 @@ The public package entry point exports:
 - `serveStdio`
 - Public types exported by `src/types.ts`, plus transport option types
 
-The package manifest identifies the package as `@yuhere/js-jsonrpc2`, version `3.0.0`, with Node.js `>=18`. It declares ESM package mode, an ESM module entry, a CommonJS `main` entry, and TypeScript declarations. The package export map shown in the inspected manifest does not include an explicit `require` condition; consumers SHOULD verify their module-resolution environment rather than assume all CommonJS loading patterns are supported.
+The package manifest identifies the package as `@yuhere/js-jsonrpc2`, version `2.1.x`, with Node.js `>=18`. It declares ESM package mode, an ESM module entry, a CommonJS `main` entry, and TypeScript declarations. The package export map shown in the inspected manifest does not include an explicit `require` condition; consumers SHOULD verify their module-resolution environment rather than assume all CommonJS loading patterns are supported.
 
 This document specifies the behavior supported by the supplied source snapshot. It does not specify the separate `stringifyStream` utility as a public protocol feature.
 

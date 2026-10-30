@@ -13,10 +13,11 @@ interface TestPanelProps {
     endpoint: string;
 }
 
-type CopyKind = 'curl' | 'fetch';
+type CopyKind = 'curl' | 'curl-cmd' | 'fetch';
 
 const COPY_OPTIONS: { value: CopyKind; label: string }[] = [
-    { value: 'curl', label: '复制 curl' },
+    { value: 'curl', label: '复制 curl (bash)' },
+    { value: 'curl-cmd', label: '复制 curl (cmd)' },
     { value: 'fetch', label: '复制 fetch' },
 ];
 
@@ -144,7 +145,12 @@ export function TestPanel({
                 id: 1,
             };
             const url = absoluteEndpoint(endpoint);
-            code = kind === 'curl' ? buildCurl(url, body) : buildFetch(url, body);
+            code =
+                kind === 'curl'
+                    ? buildCurl(url, body)
+                    : kind === 'curl-cmd'
+                        ? buildCurlCmd(url, body)
+                        : buildFetch(url, body);
         } catch (e) {
             setCopyError(e instanceof Error ? e.message : String(e));
             return;
@@ -278,6 +284,7 @@ interface RpcBody {
     id: number;
 }
 
+/** bash / POSIX sh：单引号包裹，内部单引号用 '\'' 转义；反斜杠续行。 */
 function buildCurl(url: string, body: RpcBody): string {
     const bodyText = JSON.stringify(body, null, 2);
     const quotedBody = `'${bodyText.replace(/'/g, `'\\''`)}'`;
@@ -286,6 +293,33 @@ function buildCurl(url: string, body: RpcBody): string {
         `  -H 'Content-Type: application/json'`,
         `  -d ${quotedBody}`,
     ].join(' \\\n');
+}
+
+/**
+ * Windows CMD：双引号包裹。
+ * - 双引号 " 用 \" 转义（curl.exe 在 cmd 下按 C 运行时规则解析）
+ * - % 用 %% 转义（避免被 cmd 当作变量展开）
+ * - 换行用 ^ 续行
+ * - 其余字符原样保留
+ */
+function buildCurlCmd(url: string, body: RpcBody): string {
+    const bodyText = JSON.stringify(body);
+    const escapeCmdDoubleQuoted = (s: string): string =>
+        s
+            // 先转义反斜杠，避免与后续 \" 混淆：\\ -> \\\\
+            .replace(/\\/g, '\\\\')
+            // 双引号 -> \"
+            .replace(/"/g, '\\"')
+            // % -> %%
+            .replace(/%/g, '%%');
+
+    const quotedBody = `"${escapeCmdDoubleQuoted(bodyText)}"`;
+    const quotedUrl = `"${escapeCmdDoubleQuoted(url)}"`;
+    return [
+        `curl -X POST ${quotedUrl} ^`,
+        `  -H "Content-Type: application/json" ^`,
+        `  -d ${quotedBody}`,
+    ].join('\n');
 }
 
 function buildFetch(url: string, body: RpcBody): string {

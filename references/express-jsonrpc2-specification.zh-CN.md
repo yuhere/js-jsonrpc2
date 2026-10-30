@@ -59,7 +59,7 @@ JSON 成员名称和方法命名空间区分大小写。
 - `serveStdio`
 - `src/types.ts` 导出的公共类型，以及各传输方式的选项类型
 
-包清单将包标识为 `@yuhere/js-jsonrpc2`，版本为 `3.0.0`，要求 Node.js `>=18`。
+包清单将包标识为 `@yuhere/js-jsonrpc2`，版本为 `2.1.x`，要求 Node.js `>=18`。
 它声明了 ESM 包模式、ESM 模块入口、CommonJS `main` 入口以及 TypeScript 声明文件。
 检查到的包导出映射没有显式的 `require` 条件；
 使用者 **SHOULD** 检查自己的模块解析环境，而不应假设所有 CommonJS 加载方式都受支持。

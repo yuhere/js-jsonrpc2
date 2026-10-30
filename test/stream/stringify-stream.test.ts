@@ -94,7 +94,7 @@ describe('stringifyStream', () => {
             ).toBe('{"x":[10,null,null,null]}');
         });
 
-        it('undefined/function/symbol in object → omitted', async () => {
+        it('undefined/function/symbol in object → null', async () => {
             expect(
                 await collect(
                     stringifyStream({
@@ -103,7 +103,7 @@ describe('stringifyStream', () => {
                         z: Symbol(''),
                     })
                 )
-            ).toBe('{}');
+            ).toBe('{"x":null,"y":null,"z":null}');
         });
 
         it('Set/Map/Weak* → {}', async () => {
@@ -205,7 +205,7 @@ describe('stringifyStream', () => {
             };
             expect(
                 await collect(stringifyStream(foo, { replacer: stringFilterReplacer }))
-            ).toBe('{"week":45,"month":7}');
+            ).toBe('{"foundation":null,"model":null,"week":45,"transport":null,"month":7}');
         });
 
         it('replacer array', async () => {
@@ -237,7 +237,7 @@ describe('stringifyStream', () => {
                 await collect(
                     stringifyStream({ '': 1, b: 2 }, { replacer: makeReplacer() })
                 )
-            ).toBe('{"b":2}');
+            ).toBe('{"":null,"b":2}');
         });
     });
 
@@ -281,7 +281,7 @@ describe('stringifyStream', () => {
 
         it('toJSON root (key === "")', async () => {
             expect(await collect(stringifyStream(objWithToJSON))).toBe(
-                '{"data":"data"}'
+                '{"data":"data","toJSON":null}'
             );
         });
 
@@ -437,15 +437,31 @@ describe('stringifyStream', () => {
 
         // ---------- 根级别特殊值 ----------
         it('root undefined → 空输出', async () => {
-            expect(await collect(stringifyStream(undefined))).toBe('');
+            expect(await collect(stringifyStream(undefined))).toBe('null');
+        });
+
+        it('root Promise<undefined> → null', async () => {
+            expect(
+                await collect(stringifyStream(Promise.resolve(undefined)))
+            ).toBe('null');
+        });
+
+        it('array undefined → null', async () => {
+            expect(
+                await collect(stringifyStream([undefined]))
+            ).toBe('[null]');
         });
 
         it('root function → 空输出', async () => {
-            expect(await collect(stringifyStream(() => { }))).toBe('');
+            expect(await collect(stringifyStream(() => { }))).toBe('null');
         });
 
         it('root symbol → 空输出', async () => {
-            expect(await collect(stringifyStream(Symbol('x')))).toBe('');
+            expect(await collect(stringifyStream(Symbol('x')))).toBe('null');
+        });
+
+        it('symbol → 空输出', async () => {
+            expect(await collect(stringifyStream({ a: { b: Symbol('x') } }))).toBe('{"a":{"b":null}}');
         });
 
         // ---------- toJSON 返回特殊值 ----------
@@ -455,7 +471,7 @@ describe('stringifyStream', () => {
                     return undefined;
                 },
             };
-            expect(await collect(stringifyStream(obj))).toBe('');
+            expect(await collect(stringifyStream(obj))).toBe('null');
         });
 
         it('toJSON 返回 Promise', async () => {
@@ -791,7 +807,7 @@ describe('stringifyStream', () => {
         });
 
         // ---------- 对象属性 replacer 返回 Promise → undefined（应省略） ----------
-        it('object property replacer returns Promise resolving to undefined → omit', async () => {
+        it('object property replacer returns Promise resolving to undefined → null', async () => {
             const result = await collect(
                 stringifyStream(
                     { a: 1, b: 2 },
@@ -803,7 +819,7 @@ describe('stringifyStream', () => {
                     }
                 )
             );
-            expect(result).toBe('{"b":2}');
+            expect(result).toBe('{"a":null,"b":2}');
         });
 
         // ---------- 嵌套结构 + space + 小 buffer（触发多次 flush） ----------
@@ -846,7 +862,7 @@ describe('stringifyStream', () => {
                     b: 1,
                 })
             );
-            expect(resultObj).toBe('{"b":1}');
+            expect(resultObj).toBe('{"a":null,"b":1}');
         });
 
         // ---------- Promise resolves to symbol ----------
@@ -886,19 +902,147 @@ describe('stringifyStream', () => {
 
     });
 
-    // describe('手工测试', () => {
-    //     it('large object with small buffer', async () => {
-    //         const big = {
-    //             users: Array.from({ length: 5 }, (_, i) => ({
-    //                 id: i,
-    //                 name: `user-${i}`,
-    //                 active: i % 2 === 0,
-    //             })),
-    //         };
-    //         for await (const chunk of stringifyStream(big, { bufferSize: 10 })) {
-    //             console.log(chunk);
-    //         }
-    //     });
-    // });
+    describe('手工测试', () => {
+        it('replacer this should be the property holder', async () => {
+            const contexts: Array<{
+                key: string;
+                holder: any;
+            }> = [];
+            const input = {
+                a: {
+                    b: 1,
+                },
+            };
+            await collect(
+                stringifyStream(input, {
+                    replacer(this: any, key, value) {
+                        contexts.push({ key, holder: this });
+                        return value;
+                    },
+                })
+            );
+
+            // 根对象
+            expect(contexts[0]?.key).toBe('');
+            expect(contexts[0]?.holder['']).toBe(input);
+
+            // a 属性
+            expect(contexts[1]?.key).toBe('a');
+            expect(contexts[1]?.holder).toBe(input);
+
+            // b 属性
+            expect(contexts[2]?.key).toBe('b');
+            expect(contexts[2]?.holder).toBe(input.a);
+        });
+
+        it('Promise resolves to object with toJSON', async () => {
+            class CustomValue {
+                value = 123;
+                toJSON() {
+                    return {
+                        converted: true,
+                    };
+                }
+            }
+
+            const result = await collect(
+                stringifyStream({
+                    data: Promise.resolve(new CustomValue()),
+                })
+            );
+
+            expect(result).toBe('{"data":{"converted":true}}');
+        });
+
+        it('iterator should be closed when serialization fails', async () => {
+            let closed = false;
+
+            function* gen() {
+                try {
+                    yield 1n;
+                    yield 2;
+                } finally {
+                    closed = true;
+                }
+            }
+
+            await expect(
+                collect(stringifyStream(gen()))
+            ).rejects.toThrow(/BigInt/);
+
+            expect(closed).toBe(true);
+        });
+
+        it('async iterator should be closed when serialization fails', async () => {
+            let closed = false;
+
+            async function* gen() {
+                try {
+                    yield 1n;
+                    yield 2;
+                } finally {
+                    closed = true;
+                }
+            }
+
+            await expect(
+                collect(stringifyStream(gen()))
+            ).rejects.toThrow(/BigInt/);
+
+            expect(closed).toBe(true);
+        });
+
+        it('bufferSize larger than 32-bit integer range', async () => {
+            const chunks: string[] = [];
+
+            for await (const chunk of stringifyStream(
+                { value: 'hello' },
+                { bufferSize: 2 ** 32 + 8 }
+            )) {
+                chunks.push(chunk);
+            }
+
+            expect(chunks).toHaveLength(1);
+            expect(chunks.join('')).toBe('{"value":"hello"}');
+        });
+
+        it('should not split UTF-16 surrogate pairs across chunks', async () => {
+            const chunks: string[] = [];
+
+            for await (const chunk of stringifyStream('😀', {
+                bufferSize: 1,
+            })) {
+                chunks.push(chunk);
+            }
+
+            const result = Buffer.concat(
+                chunks.map((chunk) => Buffer.from(chunk))
+            ).toString('utf8');
+
+            expect(result).toBe('"😀"');
+        });
+
+        it('iterable circular reference throws TypeError', async () => {
+            const iterable: any = {
+                *[Symbol.iterator]() {
+                    yield this;
+                },
+            };
+            await expect(
+                collect(stringifyStream(iterable))
+            ).rejects.toThrow(/circular/i);
+        });
+
+        it('shared iterable reference is not circular', async () => {
+            const shared = [1, 2];
+            const input = {
+                a: shared,
+                b: shared,
+            };
+            expect(await collect(stringifyStream(input))).toBe(
+                '{"a":[1,2],"b":[1,2]}'
+            );
+        });
+    });
 
 });

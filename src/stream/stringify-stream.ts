@@ -1,3 +1,4 @@
+
 /**
  * 流式 JSON 序列化 AsyncGenerator
  * 尽可能兼容原生 JSON.stringify，同时支持 Promise / Generator / AsyncGenerator / Buffer
@@ -27,23 +28,34 @@ export async function* stringifyStream(
         space,
         replacer,
     } = options;
-    const bufferSize = Math.max(1, rawBufferSize | 0);
+
+    const bufferSize = Number.isFinite(rawBufferSize)
+        ? Math.max(1, Math.floor(rawBufferSize))
+        : DEFAULT_BUFFER_SIZE;
 
     const seen = new WeakSet<object>();
+
     let gap = '';
+
     if (typeof space === 'number') {
-        gap = ' '.repeat(Math.min(MAX_GAP_LENGTH, Math.max(0, Math.floor(space))));
+        gap = ' '.repeat(
+            Math.min(MAX_GAP_LENGTH, Math.max(0, Math.floor(space)))
+        );
     } else if (typeof space === 'string') {
         gap = space.slice(0, MAX_GAP_LENGTH);
     }
 
-    let replacerFn: ((this: any, key: string, value: any) => any) | null = null;
+    let replacerFn:
+        | ((this: any, key: string, value: any) => any)
+        | null = null;
+
     let propertyList: Set<string> | null = null;
 
     if (typeof replacer === 'function') {
         replacerFn = replacer;
     } else if (Array.isArray(replacer)) {
         propertyList = new Set<string>();
+
         for (const p of replacer) {
             if (typeof p === 'string' || typeof p === 'number') {
                 propertyList.add(String(p));
@@ -55,8 +67,24 @@ export async function* stringifyStream(
 
     function* flush(force = false): Generator<string, void, unknown> {
         while (buffer.length >= bufferSize || (force && buffer.length > 0)) {
-            const chunk = buffer.slice(0, bufferSize);
-            buffer = buffer.slice(bufferSize);
+            let end = Math.min(bufferSize, buffer.length);
+
+            // 不要在 UTF-16 surrogate pair 中间切分
+            if (end < buffer.length) {
+                const prev = buffer.charCodeAt(end - 1);
+                const next = buffer.charCodeAt(end);
+
+                const isHighSurrogate = prev >= 0xD800 && prev <= 0xDBFF;
+                const isLowSurrogate = next >= 0xDC00 && next <= 0xDFFF;
+
+                if (isHighSurrogate && isLowSurrogate) {
+                    end++;
+                }
+            }
+
+            const chunk = buffer.slice(0, end);
+            buffer = buffer.slice(end);
+
             yield chunk;
         }
     }
@@ -73,6 +101,7 @@ export async function* stringifyStream(
         if (seen.has(value)) {
             throw new TypeError('Converting circular structure to JSON');
         }
+
         seen.add(value);
     }
 
@@ -82,6 +111,7 @@ export async function* stringifyStream(
 
     function isPrimitive(v: unknown): boolean {
         const t = typeof v;
+
         return (
             v === null ||
             t === 'string' ||
@@ -103,7 +133,11 @@ export async function* stringifyStream(
         return ArrayBuffer.isView(value) && !(value instanceof DataView);
     }
 
-    function prepareValue(value: unknown, key: string): unknown {
+    function prepareValue(
+        value: unknown,
+        key: string,
+        holder: object
+    ): unknown {
         // 1. toJSON（跳过 Buffer）
         if (
             value !== null &&
@@ -116,11 +150,7 @@ export async function* stringifyStream(
 
         // 2. replacer
         if (replacerFn) {
-            value = replacerFn.call(
-                key === '' ? undefined : null,
-                key,
-                value
-            );
+            value = replacerFn.call(holder, key, value);
         }
 
         return value;
@@ -129,29 +159,16 @@ export async function* stringifyStream(
     async function* serialize(
         value: unknown,
         key: string,
-        depth: number
+        depth: number,
+        holder: object
     ): AsyncGenerator<string, void, unknown> {
-        // ========== 只在这里做一次 prepare ==========
-        value = prepareValue(value, key);
-
-        // undefined / function / symbol → 由调用方决定（对象省略，数组写 null）
-        if (
-            value === undefined ||
-            typeof value === 'function' ||
-            typeof value === 'symbol'
-        ) {
-            return;
-        }
+        // 只在这里做一次 prepare
+        value = prepareValue(value, key, holder);
 
         assertNoBigInt(value);
 
-        // Promise（replacer 或 toJSON 返回的 Promise 在这里统一处理）
         if (value instanceof Promise) {
             value = await Promise.resolve(value);
-            // 注意：await 之后要重新走完整流程（包括可能的再次 toJSON/replacer？）
-            // 为了与「只 prepare 一次」一致，这里选择不再 prepare，直接递归时跳过 prepare
-            // 最简单且安全的做法：再调一次 serialize（此时 value 已是 resolved 后的值）
-            // 但为了避免对 resolved 后的 number 再次触发 replacer，我们改成内部递归时传一个 flag
             yield* serializePrepared(value, key, depth);
             return;
         }
@@ -159,7 +176,10 @@ export async function* stringifyStream(
         yield* serializePrepared(value, key, depth);
     }
 
-    /** 已经完成 prepare 的值，直接序列化（不再调用 toJSON/replacer） */
+    /**
+     * 已经完成 prepare 的值，直接序列化
+     * 不再调用 toJSON / replacer。
+     */
     async function* serializePrepared(
         value: unknown,
         key: string,
@@ -170,6 +190,7 @@ export async function* stringifyStream(
             typeof value === 'function' ||
             typeof value === 'symbol'
         ) {
+            write('null');
             return;
         }
 
@@ -216,9 +237,19 @@ export async function* stringifyStream(
             for (let i = 0; i < value.length; i++) {
                 if (!first) write(',');
                 first = false;
-                if (gap) write('\n' + gap.repeat(depth + 1));
+                if (gap) {
+                    write('\n' + gap.repeat(depth + 1));
+                }
 
-                let elem = prepareValue(value[i], String(i));
+                let rawValue = value[i];
+
+                // 1. 先等待原始值
+                if (rawValue instanceof Promise) {
+                    rawValue = await Promise.resolve(rawValue);
+                }
+
+                // 2. 执行 toJSON 和 replacer
+                let elem = prepareValue(rawValue, String(i), value);
                 if (elem instanceof Promise) {
                     elem = await Promise.resolve(elem);
                 }
@@ -250,7 +281,9 @@ export async function* stringifyStream(
             for (let i = 0; i < arr.length; i++) {
                 if (!first) write(',');
                 first = false;
-                if (gap) write('\n' + gap.repeat(depth + 1));
+                if (gap) {
+                    write('\n' + gap.repeat(depth + 1));
+                }
                 writeJSONString(String(i));
                 write(gap ? ': ' : ':');
                 write(JSON.stringify(arr[i]));
@@ -264,13 +297,15 @@ export async function* stringifyStream(
             return;
         }
 
-        // 可迭代
+        // 可迭代对象
         const hasAsyncIterator =
             value != null &&
             typeof (value as any)[Symbol.asyncIterator] === 'function';
+
         const hasIterator =
             value != null &&
             typeof (value as any)[Symbol.iterator] === 'function';
+
         const isIteratorLike =
             value != null &&
             typeof (value as any).next === 'function';
@@ -283,11 +318,10 @@ export async function* stringifyStream(
             !(value instanceof WeakSet);
 
         if (shouldTreatAsIterable) {
-            write('[');
-            let first = true;
-            let idx = 0;
+            checkCycle(value as object);
 
             let iterator: AsyncIterator<unknown> | Iterator<unknown>;
+            let completed = false;
             if (hasAsyncIterator) {
                 iterator = (value as AsyncIterable<unknown>)[Symbol.asyncIterator]();
             } else if (hasIterator) {
@@ -296,41 +330,57 @@ export async function* stringifyStream(
                 iterator = value as Iterator<unknown>;
             }
 
-            while (true) {
-                const step = await Promise.resolve(iterator.next());
-                if (step.done) break;
+            try {
+                write('[');
 
-                if (!first) write(',');
-                first = false;
-                if (gap) write('\n' + gap.repeat(depth + 1));
+                let first = true;
+                let idx = 0;
 
-                // const before = buffer.length;
-                // yield* serialize(step.value, String(idx), depth + 1);
-                // if (buffer.length === before) {
-                //     write('null');
-                // }
-                // prepare + await 后再决定写 null 还是序列化（与对象路径一致）
-                let elem = prepareValue(step.value, String(idx));
-                if (elem instanceof Promise) {
-                    elem = await Promise.resolve(elem);
+                while (true) {
+                    const step = await Promise.resolve(iterator.next());
+
+                    if (step.done) {
+                        completed = true;
+                        break;
+                    }
+
+                    if (!first) write(',');
+                    first = false;
+
+                    if (gap) {
+                        write('\n' + gap.repeat(depth + 1));
+                    }
+
+                    let elem = prepareValue(step.value, String(idx), value as object);
+                    if (elem instanceof Promise) {
+                        elem = await Promise.resolve(elem);
+                    }
+                    if (
+                        elem === undefined ||
+                        typeof elem === 'function' ||
+                        typeof elem === 'symbol'
+                    ) {
+                        write('null');
+                    } else {
+                        yield* serializePrepared(elem, String(idx), depth + 1);
+                    }
+                    idx++;
+                    yield* flush();
                 }
-                if (
-                    elem === undefined ||
-                    typeof elem === 'function' ||
-                    typeof elem === 'symbol'
-                ) {
-                    write('null');
-                } else {
-                    yield* serializePrepared(elem, String(idx), depth + 1);
-                }
-                idx++;
-                yield* flush();
-            }
 
-            if (gap && !first) {
-                write('\n' + gap.repeat(depth));
+                if (gap && !first) {
+                    write('\n' + gap.repeat(depth));
+                }
+                write(']');
+            } finally {
+                if (!completed && typeof iterator.return === 'function') {
+                    try {
+                        await iterator.return();
+                    } catch {
+                    }
+                }
+                uncheckCycle(value as object);
             }
-            write(']');
             return;
         }
 
@@ -358,24 +408,19 @@ export async function* stringifyStream(
             : Object.keys(value as object);
 
         for (const k of keys) {
-            // 1. 先 prepare
-            let propValue = prepareValue((value as any)[k], k);
+            let rawValue = (value as any)[k];
+            // 1. 先等待原始值（如果它是 Promise）
+            if (rawValue instanceof Promise) {
+                rawValue = await Promise.resolve(rawValue);
+            }
+            // 2. 再执行 toJSON 和 replacer
+            let propValue = prepareValue(rawValue, k, value as object);
 
-            // 2. 如果是 Promise，先 await（关键！）
+            // 3. 如果 replacer 自身返回了 Promise，再等待它
             if (propValue instanceof Promise) {
                 propValue = await Promise.resolve(propValue);
             }
 
-            // 3. 现在再判断是否应该省略
-            if (
-                propValue === undefined ||
-                typeof propValue === 'function' ||
-                typeof propValue === 'symbol'
-            ) {
-                continue;
-            }
-
-            // 4. 可以安全地写 key 了
             if (!first) write(',');
             first = false;
 
@@ -386,8 +431,9 @@ export async function* stringifyStream(
             writeJSONString(k);
             write(gap ? ': ' : ':');
 
-            // 5. 直接序列化已经 prepare + await 过的值
+            // 4. 直接序列化已经 prepare + await 过的值
             yield* serializePrepared(propValue, k, depth + 1);
+
             yield* flush();
         }
 
@@ -398,7 +444,9 @@ export async function* stringifyStream(
         uncheckCycle(value as object);
     }
 
-    yield* serialize(input, '', 0);
+    // 根值包装：与 JSON.stringify 的根对象处理方式一致
+    const root = { '': input };
+    yield* serialize(root[''], '', 0, root);
     yield* flush(true);
 }
 
