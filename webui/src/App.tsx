@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createRpc, type TransportKind } from './api/rpc';
+import { createRPC, type TransportKind } from './api/rpc';
 import { useMethods } from './hooks/useMethods';
 import { useMethodDetail } from './hooks/useMethodDetail';
 import { useMetrics } from './hooks/useMetrics';
@@ -26,7 +26,7 @@ export default function App() {
     const [view, setView] = useState<View>('methods');
     const [methodFilter, setMethodFilter] = useState('');
 
-    const rpc = useMemo(() => createRpc({ transport, endpoint: ENDPOINT }), [transport]);
+    const rpc = useMemo(() => createRPC({ transport, endpoint: ENDPOINT }), [transport]);
 
     useEffect(() => () => rpc.close(), [rpc]);
 

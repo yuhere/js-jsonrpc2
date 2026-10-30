@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { RpcClient } from '../api/rpc';
+import type { RPCClient } from '../api/rpc';
 import type { SchemaDescription } from '../api/schema';
 
 export interface MethodDetail {
@@ -16,7 +16,7 @@ function isSchemaDescription(v: unknown): v is SchemaDescription {
     return !!v && typeof v === 'object' && typeof (v as SchemaDescription).kind === 'string';
 }
 
-export function useMethodDetail(rpc: RpcClient, method: string): MethodDetail {
+export function useMethodDetail(rpc: RPCClient, method: string): MethodDetail {
     const [detail, setDetail] = useState<MethodDetail>(EMPTY);
 
     useEffect(() => {

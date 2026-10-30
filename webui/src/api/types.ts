@@ -4,7 +4,7 @@ export interface RPCErrorPayload {
   data?: unknown;
 }
 
-export interface RpcResponse<T = unknown> {
+export interface RPCResponse<T = unknown> {
   jsonrpc: '2.0';
   id: number | string | null;
   result?: T;

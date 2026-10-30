@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { RpcClient } from '../api/rpc';
+import type { RPCClient } from '../api/rpc';
 
-export function useMethods(rpc: RpcClient) {
+export function useMethods(rpc: RPCClient) {
     const [methods, setMethods] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);

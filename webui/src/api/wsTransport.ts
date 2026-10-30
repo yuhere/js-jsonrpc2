@@ -1,12 +1,12 @@
-import type { RpcResponse } from './types';
+import type { RPCResponse } from './types';
 import {
     RPCError,
     isStreamResult,
     type CallResult,
-    type RpcClient,
+    type RPCClient,
 } from './rpc';
 
-export interface WsRpcOptions {
+export interface WsRPCOptions {
     /** 默认：根据当前页面 URL 推导（http->ws / https->wss，同路径） */
     endpoint?: string;
     connectTimeoutMs?: number;
@@ -35,7 +35,7 @@ interface StreamFrame {
 }
 
 /** 首帧等待器：resolve 到原始消息对象，由 call 决定走哪条路。 */
-type FirstWaiter = (msg: RpcResponse | StreamFrame) => void;
+type FirstWaiter = (msg: RPCResponse | StreamFrame) => void;
 
 let idCounter = 0;
 
@@ -49,7 +49,7 @@ function isStreamFrame(v: unknown): v is StreamFrame {
     return !!v && typeof v === 'object' && typeof (v as StreamFrame).done === 'boolean';
 }
 
-export function createWsRpc(options: WsRpcOptions = {}): RpcClient {
+export function createWsRPC(options: WsRPCOptions = {}): RPCClient {
     const {
         endpoint = deriveWsEndpoint(),
         connectTimeoutMs = 5000,
@@ -79,14 +79,14 @@ export function createWsRpc(options: WsRpcOptions = {}): RpcClient {
                 jsonrpc: '2.0',
                 id: 0,
                 error: { code: -32603, message: reason },
-            } as RpcResponse);
+            } as RPCResponse);
         }
         firstWaiters.clear();
     }
 
     function attach(ws: WebSocket) {
         ws.addEventListener('message', (ev) => {
-            let data: RpcResponse | RpcResponse[] | StreamFrame | StreamFrame[] | null = null;
+            let data: RPCResponse | RPCResponse[] | StreamFrame | StreamFrame[] | null = null;
             try {
                 data = JSON.parse(ev.data as string);
             } catch {
@@ -100,7 +100,7 @@ export function createWsRpc(options: WsRpcOptions = {}): RpcClient {
                 const fw = firstWaiters.get(msg.id);
                 if (fw) {
                     firstWaiters.delete(msg.id);
-                    fw(msg as RpcResponse | StreamFrame);
+                    fw(msg as RPCResponse | StreamFrame);
                     continue;
                 }
 
@@ -127,7 +127,7 @@ export function createWsRpc(options: WsRpcOptions = {}): RpcClient {
                 if (!p) continue;
                 pending.delete(msg.id);
                 clearTimeout(p.timer);
-                const plain = msg as RpcResponse;
+                const plain = msg as RPCResponse;
                 if (plain.error) p.reject(new RPCError(plain.error));
                 else p.resolve(plain.result);
             }
@@ -196,7 +196,7 @@ export function createWsRpc(options: WsRpcOptions = {}): RpcClient {
             const payload = { jsonrpc: '2.0', method, params, id };
 
             // 等第一帧
-            const first = new Promise<RpcResponse | StreamFrame>((resolve, reject) => {
+            const first = new Promise<RPCResponse | StreamFrame>((resolve, reject) => {
                 const timer = setTimeout(() => {
                     firstWaiters.delete(id);
                     reject(new Error(`调用 ${method} 超时（${callTimeoutMs}ms）`));
@@ -215,7 +215,7 @@ export function createWsRpc(options: WsRpcOptions = {}): RpcClient {
                 throw e;
             }
 
-            let firstMsg: RpcResponse | StreamFrame;
+            let firstMsg: RPCResponse | StreamFrame;
             try {
                 firstMsg = await first;
             } catch (e) {
@@ -286,7 +286,7 @@ export function createWsRpc(options: WsRpcOptions = {}): RpcClient {
             if (firstMsg.error) {
                 throw new RPCError(firstMsg.error);
             }
-            return (firstMsg as RpcResponse).result as T;
+            return (firstMsg as RPCResponse).result as T;
         })();
     }
 

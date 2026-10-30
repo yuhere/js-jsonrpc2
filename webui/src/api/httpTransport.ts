@@ -1,11 +1,11 @@
-import type { RpcResponse } from './types';
+import type { RPCResponse } from './types';
 import {
     RPCError,
     type CallResult,
-    type RpcClient,
+    type RPCClient,
 } from './rpc';
 
-export interface HttpRpcOptions {
+export interface HttpRPCOptions {
     endpoint?: string;
     headers?: Record<string, string>;
     fetchImpl?: typeof fetch;
@@ -49,7 +49,7 @@ function isStreamFrame(v: unknown): v is StreamFrame {
     return !!v && typeof v === 'object' && typeof (v as StreamFrame).done === 'boolean';
 }
 
-export function createHttpRpc(options: HttpRpcOptions = {}): RpcClient {
+export function createHttpRPC(options: HttpRPCOptions = {}): RPCClient {
     const {
         endpoint = '',
         headers = {},
@@ -76,7 +76,7 @@ export function createHttpRpc(options: HttpRpcOptions = {}): RpcClient {
             }
 
             if (!res.body) {
-                const payload = (await res.json()) as RpcResponse<T>;
+                const payload = (await res.json()) as RPCResponse<T>;
                 if (payload.error) throw new RPCError(payload.error);
                 return payload.result as T;
             }
@@ -91,7 +91,7 @@ export function createHttpRpc(options: HttpRpcOptions = {}): RpcClient {
                 throw new Error(`Empty response for ${method}`);
             }
 
-            let first: StreamFrame | RpcResponse<T>;
+            let first: StreamFrame | RPCResponse<T>;
             try {
                 first = JSON.parse(firstLine);
             } catch (e) {
@@ -102,7 +102,7 @@ export function createHttpRpc(options: HttpRpcOptions = {}): RpcClient {
             }
 
             if (!isStreamFrame(first)) {
-                const payload = first as RpcResponse<T>;
+                const payload = first as RPCResponse<T>;
                 await reader.cancel().catch(() => { /* ignore */ });
                 if (payload.error) throw new RPCError(payload.error);
                 return payload.result as T;

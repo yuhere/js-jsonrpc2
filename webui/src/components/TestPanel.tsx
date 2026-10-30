@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { RPCError, isStreamResult, type RpcClient, type TransportKind } from '../api/rpc';
+import { RPCError, isStreamResult, type RPCClient, type TransportKind } from '../api/rpc';
 import type { MethodDetail } from '../hooks/useMethodDetail';
 import { SchemaForm } from './SchemaForm';
 import { sampleFromSchema } from '../api/paramForm';
@@ -8,7 +8,7 @@ import { absoluteEndpoint } from '../api/httpTransport';
 interface TestPanelProps {
     method: string;
     detail: MethodDetail;
-    rpc: RpcClient;
+    rpc: RPCClient;
     transport: TransportKind;
     endpoint: string;
 }
@@ -277,7 +277,7 @@ export function TestPanel({
 // 代码片段生成
 // ─────────────────────────────────────────────────────────────
 
-interface RpcBody {
+interface RPCBody {
     jsonrpc: '2.0';
     method: string;
     params: unknown[];
@@ -285,7 +285,7 @@ interface RpcBody {
 }
 
 /** bash / POSIX sh：单引号包裹，内部单引号用 '\'' 转义；反斜杠续行。 */
-function buildCurl(url: string, body: RpcBody): string {
+function buildCurl(url: string, body: RPCBody): string {
     const bodyText = JSON.stringify(body, null, 2);
     const quotedBody = `'${bodyText.replace(/'/g, `'\\''`)}'`;
     return [
@@ -302,7 +302,7 @@ function buildCurl(url: string, body: RpcBody): string {
  * - 换行用 ^ 续行
  * - 其余字符原样保留
  */
-function buildCurlCmd(url: string, body: RpcBody): string {
+function buildCurlCmd(url: string, body: RPCBody): string {
     const bodyText = JSON.stringify(body);
     const escapeCmdDoubleQuoted = (s: string): string =>
         s
@@ -322,7 +322,7 @@ function buildCurlCmd(url: string, body: RpcBody): string {
     ].join('\n');
 }
 
-function buildFetch(url: string, body: RpcBody): string {
+function buildFetch(url: string, body: RPCBody): string {
     const bodyText = JSON.stringify(body, null, 2);
     const indented = bodyText
         .split('\n')

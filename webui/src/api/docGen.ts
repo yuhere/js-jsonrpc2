@@ -1,4 +1,4 @@
-import type { RpcClient } from './rpc';
+import type { RPCClient } from './rpc';
 import type { SchemaDescription } from './schema';
 
 export interface MethodDoc {
@@ -19,7 +19,7 @@ function isSchema(v: unknown): v is SchemaDescription {
 
 /** 逐个方法拉取 help + signature */
 export async function collectApiDoc(
-    rpc: RpcClient,
+    rpc: RPCClient,
     methods: string[],
     onProgress?: (done: number, total: number) => void,
 ): Promise<ApiDoc> {

@@ -1,4 +1,4 @@
-import type { RpcClient } from './rpc';
+import type { RPCClient } from './rpc';
 
 // ─── 与后端 memory.ts 对齐的类型（只读快照） ─────────────────
 
@@ -48,7 +48,7 @@ export interface MetricsFetchResult {
 }
 
 /** 拉取 system.metrics；如果系统方法不可用（withSystemMethods=false），返回 undefined。 */
-export async function fetchMetrics(rpc: RpcClient): Promise<MetricsSnapshot | undefined> {
+export async function fetchMetrics(rpc: RPCClient): Promise<MetricsSnapshot | undefined> {
     try {
         const raw = await rpc.call<MetricsSnapshot>('system.metrics');
         if (!raw || typeof raw !== 'object' || typeof raw.methods !== 'object') return undefined;

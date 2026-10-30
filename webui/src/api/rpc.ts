@@ -1,17 +1,17 @@
 import type { RPCErrorPayload } from './types';
-import { createHttpRpc, type HttpRpcOptions } from './httpTransport';
-import { createWsRpc, type WsRpcOptions } from './wsTransport';
+import { createHttpRPC, type HttpRPCOptions } from './httpTransport';
+import { createWsRPC, type WsRPCOptions } from './wsTransport';
 
 export type TransportKind = 'http' | 'ws';
 
 export type CallResult<T> = Promise<T> | AsyncGenerator<T, void, unknown>;
 
-export interface RpcClient {
+export interface RPCClient {
   call<T = unknown>(method: string, ...params: unknown[]): CallResult<T>;
   close(): void;
 }
 
-export interface RpcOptions {
+export interface RPCOptions {
   transport: TransportKind;
   endpoint?: string;
   headers?: Record<string, string>;
@@ -38,20 +38,20 @@ export function isStreamResult<T>(v: CallResult<T>): v is AsyncGenerator<T, void
   );
 }
 
-export function createRpc(options: RpcOptions): RpcClient {
+export function createRPC(options: RPCOptions): RPCClient {
   if (options.transport === 'ws') {
-    const wsOpts: WsRpcOptions = {
+    const wsOpts: WsRPCOptions = {
       endpoint: options.endpoint,
       connectTimeoutMs: options.connectTimeoutMs,
       callTimeoutMs: options.callTimeoutMs,
     };
-    return createWsRpc(wsOpts);
+    return createWsRPC(wsOpts);
   }
 
-  const httpOpts: HttpRpcOptions = {
+  const httpOpts: HttpRPCOptions = {
     endpoint: options.endpoint,
     headers: options.headers,
     fetchImpl: options.fetchImpl,
   };
-  return createHttpRpc(httpOpts);
+  return createHttpRPC(httpOpts);
 }

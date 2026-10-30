@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { RpcClient } from '../api/rpc';
+import type { RPCClient } from '../api/rpc';
 import {
     fetchMetrics,
     type MetricsSnapshot,
@@ -23,7 +23,7 @@ export interface UseMetricsState {
     available: boolean;
 }
 
-export function useMetrics(rpc: RpcClient, enabled: boolean): UseMetricsState {
+export function useMetrics(rpc: RPCClient, enabled: boolean): UseMetricsState {
     const [snapshot, setSnapshot] = useState<MetricsSnapshot | undefined>(undefined);
     const [previous, setPrevious] = useState<{ snapshot: MetricsSnapshot; fetchedAt: number } | undefined>(undefined);
     const [fetchedAt, setFetchedAt] = useState<number | undefined>(undefined);
