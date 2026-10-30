@@ -11,15 +11,17 @@
 
 
 ====
-5. webui 的 i18n。            
-6. “生成文档” 按钮还需要吗？因为从后台已经构建了 tools 让 AI 使用了。
+5. webui 的 i18n。            done
+
+7. webui 需要产生一份 RPC clinet。用户可以用这个作为客户端。  done
+
+
 
 ====
-7. webui 需要产生一份 RPC clinet。用户可以用这个作为客户端。
+6. “生成文档” 按钮还需要吗？因为从后台已经构建了 tools 让 AI 使用了。
+
 8. 给 @yuhere 的 js 包写 skill.md。
 9. webui 的 RPC 客户端，要使用 @yuhere/readline 读取 http response 数据。 
 10. webui 的 Metrics 过滤面板使用 @yuhere/js-strings 的 glob 来过滤。
 11. 写清楚 `system.methodSignature` 方法为什么不能精确的/完整的描述。
-
-
 12. stringify 的 benchmark 
