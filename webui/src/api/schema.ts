@@ -1,10 +1,5 @@
-/**
- * 与服务端 `schema/json/primitives.ts` 的 `SchemaDescription` 对齐。
- * 按 `kind` 区分的联合类型；无 `children` 包装层。
- *
- * 另含签名专用的 `stream` / `void`（由 `system.methodSignature` 返回，
- * 不是普通 Schema 的 toJSON 结果）。
- */
+export type JSONPrimitive = string | number | boolean | null;
+export type JSONValue = JSONPrimitive | JSONValue[] | { [key: string]: JSONValue };
 
 export type SchemaKind =
   | "string"
@@ -23,9 +18,10 @@ export type SchemaKind =
   | "stream";
 
 export interface BaseSchemaDescription {
-  kind: SchemaKind | string;
+  kind: SchemaKind;
   description?: string;
   nullable?: boolean;
+  validate?: boolean;
   constraints?: Record<string, unknown>;
 }
 
@@ -43,34 +39,33 @@ export interface LeafSchemaDescription extends BaseSchemaDescription {
 }
 
 export interface ObjectSchemaDescription extends BaseSchemaDescription {
-  kind: "object";
-  properties: Record<string, SchemaDescription>;
+  kind: 'object';
+  properties?: Record<string, SchemaDescription>;
 }
 
 export interface ArraySchemaDescription extends BaseSchemaDescription {
-  kind: "array";
-  element: SchemaDescription;
+  kind: 'array';
+  element?: SchemaDescription;
 }
 
 export interface RecordSchemaDescription extends BaseSchemaDescription {
-  kind: "record";
-  value: SchemaDescription;
+  kind: 'record';
+  value?: SchemaDescription;
 }
 
 export interface UnionSchemaDescription extends BaseSchemaDescription {
-  kind: "union";
-  options: SchemaDescription[];
+  kind: 'union';
+  options?: SchemaDescription[];
 }
 
 export interface TupleSchemaDescription extends BaseSchemaDescription {
-  kind: "tuple";
-  elements: SchemaDescription[];
+  kind: 'tuple';
+  elements?: SchemaDescription[];
 }
 
-/** 签名返回槽：流式；子描述在 `inner`（与后端 marker 语义一致） */
 export interface StreamSchemaDescription extends BaseSchemaDescription {
-  kind: "stream";
-  inner: SchemaDescription;
+  kind: 'stream';
+  inner?: SchemaDescription;
 }
 
 export type SchemaDescription =
@@ -80,13 +75,9 @@ export type SchemaDescription =
   | RecordSchemaDescription
   | UnionSchemaDescription
   | TupleSchemaDescription
-  | StreamSchemaDescription;
+  | StreamSchemaDescription
+  | BaseSchemaDescription;
 
-/** 类型守卫 */
 export function isSchemaDescription(v: unknown): v is SchemaDescription {
-  return (
-    !!v &&
-    typeof v === "object" &&
-    typeof (v as SchemaDescription).kind === "string"
-  );
+  return !!v && typeof v === 'object' && typeof (v as SchemaDescription).kind === 'string';
 }

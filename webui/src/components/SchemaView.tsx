@@ -24,6 +24,7 @@ const KIND_COLORS: Record<string, string> = {
     unknown: 'var(--syn-muted)',
     null: 'var(--syn-muted)',
     stream: 'var(--syn-container)',
+    void: 'var(--syn-muted)',
 };
 
 function colorOf(kind: string): string {
@@ -36,11 +37,23 @@ function formatConstraints(constraints?: Record<string, unknown>): string {
     const entries = Object.entries(constraints).filter(([, v]) => v !== undefined);
     if (entries.length === 0) return '';
     return entries
-        .map(([k, v]) => `${k}=${typeof v === 'string' ? JSON.stringify(v) : JSON.stringify(v)}`)
+        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
         .join(', ');
 }
 
-type Translate = (key: string, vars?: Record<string, string | number>) => string;
+function isSchemaDescription(v: unknown): v is SchemaDescription {
+    return !!v && typeof v === 'object' && typeof (v as SchemaDescription).kind === 'string';
+}
+
+type SchemaAny = SchemaDescription & {
+    element?: unknown;
+    value?: unknown;
+    properties?: unknown;
+    options?: unknown;
+    elements?: unknown;
+    inner?: unknown;
+    validate?: boolean;
+};
 
 interface NodeProps {
     schema: SchemaDescription;
@@ -49,16 +62,49 @@ interface NodeProps {
     label?: string;
 }
 
+function hasChildNodes(schema: SchemaAny): boolean {
+    switch (schema.kind) {
+        case 'array':
+            return isSchemaDescription(schema.element);
+        case 'record':
+            return isSchemaDescription(schema.value);
+        case 'tuple':
+            return Array.isArray(schema.elements) && schema.elements.some(isSchemaDescription);
+        case 'union':
+            return Array.isArray(schema.options) && schema.options.some(isSchemaDescription);
+        case 'object':
+            return (
+                !!schema.properties &&
+                typeof schema.properties === 'object' &&
+                !Array.isArray(schema.properties) &&
+                Object.values(schema.properties as Record<string, unknown>).some(isSchemaDescription)
+            );
+        case 'stream': {
+            const inner = isSchemaDescription(schema.inner)
+                ? schema.inner
+                : undefined;
+            return !!inner;
+        }
+        default:
+            return false;
+    }
+}
+
 function SchemaNode({ schema, depth, defaultOpen, label }: NodeProps) {
     const t = useT();
     const [open, setOpen] = useState(defaultOpen);
-    const hasChildren = hasChildNodes(schema);
+    const anySchema = schema as SchemaAny;
+    const expandable = hasChildNodes(anySchema);
     const constraintsText = formatConstraints(schema.constraints);
+    const validationOff = anySchema.validate === false;
 
     return (
         <div className="schema-node" style={{ paddingLeft: depth * 14 }}>
-            <div className="schema-head" onClick={() => hasChildren && setOpen((o) => !o)}>
-                {hasChildren ? (
+            <div
+                className="schema-head"
+                onClick={() => expandable && setOpen((o) => !o)}
+            >
+                {expandable ? (
                     <span className="schema-expander">{open ? '▾' : '▸'}</span>
                 ) : (
                     <span className="schema-expander" />
@@ -67,71 +113,52 @@ function SchemaNode({ schema, depth, defaultOpen, label }: NodeProps) {
                 <span className="schema-kind" style={{ color: colorOf(schema.kind) }}>
                     {schema.kind}
                 </span>
-                {schema.kind === 'stream' && <span className="schema-nullable">&lt;stream&gt;</span>}
-                {schema.nullable && <span className="schema-nullable-badge">nullable</span>}
-                {constraintsText && <span className="schema-constraints">{`{ ${constraintsText} }`}</span>}
-                {schema.description && (
-                    <span className="schema-description" title={schema.description}>
-                        {' '}
-                        // {schema.description}
+                {schema.kind === 'stream' && (
+                    <span className="schema-nullable">&lt;stream&gt;</span>
+                )}
+                {schema.nullable && (
+                    <span className="schema-nullable-badge">nullable</span>
+                )}
+                {validationOff && (
+                    <span className="schema-nullable-badge" title={t('schema.validationOff')}>
+                        no-validate
                     </span>
                 )}
+                {constraintsText ? (
+                    <span className="schema-constraints">{`{ ${constraintsText} }`}</span>
+                ) : null}
+                {schema.description ? (
+                    <span className="schema-description">— {schema.description}</span>
+                ) : null}
             </div>
-            {open && hasChildren && (
-                <div className="schema-children">{renderChildren(schema, depth + 1, t)}</div>
+            {expandable && open && (
+                <div className="schema-children">{renderChildren(anySchema, depth + 1, t)}</div>
             )}
         </div>
     );
 }
 
-function isSchemaDescription(v: unknown): v is SchemaDescription {
-    return !!v && typeof v === 'object' && typeof (v as SchemaDescription).kind === 'string';
-}
-
-/** 是否存在可展开的子节点（新结构 + stream 的兼容路径） */
-function hasChildNodes(schema: SchemaDescription): boolean {
-    switch (schema.kind) {
-        case 'array':
-            return isSchemaDescription((schema as { element?: unknown }).element);
-        case 'record':
-            return isSchemaDescription((schema as { value?: unknown }).value);
-        case 'tuple': {
-            const els = (schema as { elements?: unknown }).elements;
-            return Array.isArray(els) && els.some(isSchemaDescription);
-        }
-        case 'union': {
-            const opts = (schema as { options?: unknown }).options;
-            return Array.isArray(opts) && opts.some(isSchemaDescription);
-        }
-        case 'object': {
-            const props = (schema as { properties?: unknown }).properties;
-            return !!props && typeof props === 'object' && !Array.isArray(props) && Object.keys(props).length > 0;
-        }
-        case 'stream': {
-            // signatureOf 仍可能输出 { kind:'stream', children:{ inner } }
-            const any = schema as { inner?: unknown; children?: { inner?: unknown } };
-            return isSchemaDescription(any.inner) || isSchemaDescription(any.children?.inner);
-        }
-        default:
-            return false;
-    }
-}
-
+/**
+ * 子节点渲染约定：
+ * - array / record / stream：直接展开，不挂 element / value / inner 标签
+ * - object：属性名作标签
+ * - union：option[i]
+ * - tuple：[i]
+ */
 function renderChildren(
-    schema: SchemaDescription,
+    schema: SchemaAny,
     depth: number,
-    t: Translate,
-): React.ReactNode {
+    t: (key: string, vars?: Record<string, string | number>) => string,
+): React.ReactNode[] {
     const out: React.ReactNode[] = [];
 
     switch (schema.kind) {
         case 'array': {
-            const element = (schema as { element?: unknown }).element;
-            if (isSchemaDescription(element)) {
+            if (isSchemaDescription(schema.element)) {
                 out.push(
                     <SchemaNode
                         key="element"
-                        schema={element}
+                        schema={schema.element}
                         depth={depth}
                         defaultOpen
                     />,
@@ -140,12 +167,11 @@ function renderChildren(
             break;
         }
         case 'record': {
-            const value = (schema as { value?: unknown }).value;
-            if (isSchemaDescription(value)) {
+            if (isSchemaDescription(schema.value)) {
                 out.push(
                     <SchemaNode
                         key="value"
-                        schema={value}
+                        schema={schema.value}
                         depth={depth}
                         defaultOpen
                     />,
@@ -154,9 +180,8 @@ function renderChildren(
             break;
         }
         case 'tuple': {
-            const elements = (schema as { elements?: unknown }).elements;
-            if (Array.isArray(elements)) {
-                elements.forEach((item, i) => {
+            if (Array.isArray(schema.elements)) {
+                schema.elements.forEach((item, i) => {
                     if (isSchemaDescription(item)) {
                         out.push(
                             <SchemaNode
@@ -173,9 +198,8 @@ function renderChildren(
             break;
         }
         case 'union': {
-            const options = (schema as { options?: unknown }).options;
-            if (Array.isArray(options)) {
-                options.forEach((opt, i) => {
+            if (Array.isArray(schema.options)) {
+                schema.options.forEach((opt, i) => {
                     if (isSchemaDescription(opt)) {
                         out.push(
                             <SchemaNode
@@ -192,9 +216,9 @@ function renderChildren(
             break;
         }
         case 'object': {
-            const props = (schema as { properties?: unknown }).properties;
+            const props = schema.properties;
             if (props && typeof props === 'object' && !Array.isArray(props)) {
-                for (const [key, prop] of Object.entries(props)) {
+                for (const [key, prop] of Object.entries(props as Record<string, unknown>)) {
                     if (isSchemaDescription(prop)) {
                         out.push(
                             <SchemaNode
@@ -211,20 +235,12 @@ function renderChildren(
             break;
         }
         case 'stream': {
-            const any = schema as { inner?: unknown; children?: { inner?: unknown } };
-            const inner = isSchemaDescription(any.inner)
-                ? any.inner
-                : isSchemaDescription(any.children?.inner)
-                    ? any.children!.inner
-                    : undefined;
+            const inner = isSchemaDescription(schema.inner)
+                ? schema.inner
+                : undefined;
             if (inner) {
                 out.push(
-                    <SchemaNode
-                        key="inner"
-                        schema={inner}
-                        depth={depth}
-                        defaultOpen
-                    />,
+                    <SchemaNode key="inner" schema={inner} depth={depth} defaultOpen />,
                 );
             }
             break;

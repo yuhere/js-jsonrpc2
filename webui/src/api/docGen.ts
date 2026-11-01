@@ -53,32 +53,22 @@ export async function collectApiDoc(
 // Markdown 渲染
 // ─────────────────────────────────────────────────────────────
 
-function renderSchema(schema: SchemaDescription): string {
-    // 简单的单行描述：kind + constraints + nullable
-    let s = schema.kind;
-    if (schema.nullable) s += ' | null';
-    const c = schema.constraints;
-    if (c && Object.keys(c).length > 0) {
-        const parts = Object.entries(c)
-            .filter(([, v]) => v !== undefined)
-            .map(([k, v]) => `${k}=${JSON.stringify(v)}`);
-        if (parts.length) s += ` { ${parts.join(', ')} }`;
-    }
-    return s;
-}
-
 /**
  * 树状渲染 schema。
  * - array / record / stream：直接展开子节点，不挂 element / value / inner 标签
  * - object：属性名作标签
  * - union：option[i]
  * - tuple：[i]
+ * - validate === false 时在行尾标注 _(no validate)_
  */
 function renderSchemaTree(schema: SchemaDescription, indent = 0): string[] {
     const pad = '  '.repeat(indent);
     const lines: string[] = [];
     let head = `${pad}- \`${schema.kind}\``;
     if (schema.nullable) head += ' _(nullable)_';
+    if ((schema as { validate?: boolean }).validate === false) {
+        head += ' _(no validate)_';
+    }
     if (schema.description) head += ` — ${schema.description}`;
     const c = schema.constraints;
     if (c && Object.keys(c).length > 0) {
@@ -142,13 +132,10 @@ function renderSchemaTree(schema: SchemaDescription, indent = 0): string[] {
             break;
         }
         case 'stream': {
-            // 兼容 signatureOf 的 children.inner 与可能的顶层 inner
-            const any = schema as { inner?: unknown; children?: { inner?: unknown } };
+            const any = schema as { inner?: unknown; };
             const inner = isSchema(any.inner)
                 ? any.inner
-                : isSchema(any.children?.inner)
-                    ? any.children!.inner
-                    : undefined;
+                : undefined;
             if (inner) pushPlain(inner);
             break;
         }
@@ -230,5 +217,3 @@ export function downloadText(filename: string, text: string, mime = 'text/plain'
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-
-void renderSchema;

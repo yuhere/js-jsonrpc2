@@ -17,6 +17,7 @@ export interface BaseSchemaDescription {
   kind: SchemaKind;
   description?: string;
   nullable?: boolean;
+  validate?: boolean;
   constraints?: Record<string, unknown>;
 }
 
@@ -73,19 +74,29 @@ export class SchemaValidationError extends Error {
  * 只负责 description 与描述输出；nullability 由 `NullableSchema` 提供。
  * `UnknownSchema` / `NullSchema` 直接继承本类——它们天然接受 null，
  * 不需要 `.nullable()`。
+ *
+ * 运行时校验可通过 `.validate(false)` 关闭：关闭后 `parse` / `safeParse`
+ * 直接返回输入，不再调用 `_parse`（仍可用于签名描述）。
  */
 export abstract class Schema<T> {
   abstract readonly kind: SchemaKind;
 
   private description: string = "";
 
+  private _validateEnabled: boolean = true;
+
   describe(description: string): this {
     return this.cloneWith({ description });
   }
 
-  /**
-   * 创建保留原型和现有字段的新实例，供不可变链式方法使用。
-   */
+  validate(value: boolean = true): this {
+    return this.cloneWith({ _validateEnabled: value });
+  }
+
+  isValidateEnabled(): boolean {
+    return this._validateEnabled;
+  }
+
   protected cloneWith(updates: Record<string, unknown>): this {
     const clone = Object.assign(
       Object.create(Object.getPrototypeOf(this)) as object,
@@ -100,6 +111,9 @@ export abstract class Schema<T> {
   }
 
   parse(input: unknown): T {
+    if (!this._validateEnabled) {
+      return input as T;
+    }
     return this._parse(input, []);
   }
 
@@ -129,6 +143,10 @@ export abstract class Schema<T> {
 
     if (description !== undefined) {
       result.description = description;
+    }
+
+    if (!this._validateEnabled) {
+      result.validate = false;
     }
 
     return result;

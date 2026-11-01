@@ -72,7 +72,7 @@ The descriptor has three fields:
 | `grantTo` | `string[]` | Optional list of permissions required to call the method. |
 | `signature` | `[returnSchema, ...parameterSchema[]]` | Return type first, then parameters. |
 
-`signature[0]` is the return schema (`s.Schema` or `s.void()`).
+`signature[0]` is the return schema (`s.Schema`, `s.void()`, or `s.stream(inner)`).
 Every later slot is either a `s.Schema` (client-supplied) or
 `s.injectable(key)` (server-injected). Injectable slots may appear at any
 position except index `0`.
@@ -97,8 +97,12 @@ repository.register(
 
 ## Schemas
 
-Schemas are built with the `s` factory. They validate at runtime and derive
-TypeScript types.
+Schemas serve two roles:
+
+1. **Description** — document the RPC signature (`toJSON` / `system.methodSignature` / WebUI).
+2. **Validation** — check client parameters at invoke time (`parse` / `safeParse`, used by `convertParams`).
+
+They are built with the `s` factory. They validate at runtime (unless turned off) and derive TypeScript types.
 
 ```ts
 s.string()                 // string
@@ -108,28 +112,133 @@ s.boolean()                // boolean
 s.literal('2.0')           // exact literal (string | number | boolean only)
 s.null()                   // exactly null
 s.array(s.string())        // string[]
-s.object({ id: s.number() })          // open object
-s.object({ id: s.number() }).strict() // all props required, no extras
+s.object({ id: s.number() })          // open object (default: all props optional, extra props kept)
+s.object({ id: s.number() }).strict() // all declared props required, no extras
 s.record(s.number())       // Record<string, number>
 s.union([s.string(), s.number()])
 s.tuple([s.string(), s.number()])
 s.enum(['pending', 'success', 'failed'])
 s.unknown()                // any JSON value (already includes null)
 s.void()                   // RPC-only: no return value
+s.stream(s.string())       // RPC-only: streaming return (AsyncGenerator)
 s.injectable('request')    // RPC-only: server-injected parameter
 ```
 
-Chainable modifiers: `.min()`, `.max()`, `.nullable()`, `.strict()`,
-`.describe(text)`. Validation: `.parse(input)` (throws
-`SchemaValidationError`) and `.safeParse(input)` (returns a result object).
+### Chainable modifiers
+
+| Modifier | Applies to | Meaning |
+| --- | --- | --- |
+| `.min(n)` / `.max(n)` | string (length), number (bounds), array / record (size) | Inclusive bounds. |
+| `.nullable()` / `.nullable(true)` | most schemas | Allow `null`. Immutable; returns a new schema. |
+| `.nullable(false)` | same | Clear a previous nullable flag. |
+| `.describe(text)` | all schemas | Human-readable description (shown in WebUI / docs). |
+| `.validate(false)` / `.validate(true)` | all schemas | Toggle runtime validation. Default is **on**. When off, `parse` / `safeParse` accept any value and return it unchanged; the schema still describes the type for signatures and the WebUI. |
+| `.optionalProperties(keys)` | object | Whitelist of declared keys that may be missing. |
+| `.allowUnknownProperties(bool)` | object | Whether undeclared keys are kept (`true`) or rejected (`false`). |
+| `.strict()` / `.strict(true)` | object | Shortcut: no missing declared keys + reject extras. |
+| `.strict(false)` | object | Restore the default permissive object config. |
+
+Validation: `.parse(input)` (throws `SchemaValidationError` when validation is on)
+and `.safeParse(input)` (returns a result object).
 Introspection: `.toJSON()` returns a `SchemaDescription`.
 
-Nullability notes:
+### Disabling validation
+
+Schemas always participate in **signature description**. Runtime **parameter
+checks** can be turned off per schema when the server trusts the caller or the
+shape is only documentary:
+
+```ts
+// Still appears as string in system.methodSignature / WebUI,
+// but convertParams will not reject non-strings.
+s.string().validate(false)
+
+// Nested: only the inner schema skips checks
+s.object({
+  id: s.number(),
+  payload: s.unknown().validate(false),
+})
+```
+
+- Default is `validate: true` (omitted from `toJSON()` to keep descriptions small).
+- `.validate(false)` writes `validate: false` into the description.
+- `.validate(true)` restores the default; the flag is not emitted.
+- Calls are immutable (same pattern as `.nullable()`).
+
+Return-type slots are not run through `convertParams`; turning validation off on
+a return schema only affects direct `.parse` / `.safeParse` use and the
+description flag.
+
+### Object defaults and strictness
+
+By default an object schema is **permissive**:
+
+- every declared property may be omitted;
+- undeclared properties are allowed and preserved (if they are valid JSON).
+
+```ts
+const open = s.object({ name: s.string(), age: s.number() });
+open.parse({});                         // {}
+open.parse({ name: 'Ada', extra: 1 });  // { name: 'Ada', extra: 1 }
+
+const closed = open.strict();
+closed.parse({ name: 'Ada', age: 30 }); // ok
+// missing age → error; extra keys → error
+```
+
+Finer control without the all-or-nothing `strict()`:
+
+```ts
+// only `age` may be missing; still allow unknown keys
+s.object({ name: s.string(), age: s.number() }).optionalProperties(['age']);
+
+// all declared keys may be missing, but reject extras
+s.object({ name: s.string() }).allowUnknownProperties(false);
+```
+
+`optionalProperties` rejects key names that are not in the shape (throws
+`TypeError`).
+
+### Nullability notes
 
 - `.nullable()` / `.nullable(true)` allow `null`; `.nullable(false)` clears it. All calls are immutable.
 - `s.unknown()` and `s.null()` do not expose `.nullable()`; they already accept / are `null`.
 - `s.literal(v)` accepts `string | number | boolean`. Use `s.null()` for exact null, or `.nullable()` for "literal or null".
 - `s.union([...])` strips member-level nullability; only the union's own `.nullable()` decides whether `null` is accepted.
+
+### `toJSON()` / `SchemaDescription`
+
+Descriptions are a discriminated union on `kind`. There is **no** generic
+`children` bag for ordinary schemas:
+
+| kind | Child field(s) |
+| --- | --- |
+| `array` | `element` (single schema) |
+| `record` | `value` (single schema) |
+| `object` | `properties` (map) |
+| `union` | `options` (array) |
+| `tuple` | `elements` (array) |
+
+Object constraints are reported as:
+
+```ts
+constraints: {
+  optionalProps: string[];      // keys allowed to be missing
+  allowUnknownProps: boolean;   // whether extra keys are kept
+}
+```
+
+Empty constraint objects are omitted (no `constraints: {}`).
+
+When validation is disabled, the description includes `validate: false`.
+The default enabled state is not serialized.
+
+Stream returns from `system.methodSignature` / `signatureOf` currently use a
+small exception for the marker shape:
+
+```ts
+{ kind: 'stream', inner: <SchemaDescription> }
+```
 
 ## Transports
 

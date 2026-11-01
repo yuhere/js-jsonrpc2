@@ -837,3 +837,92 @@ describe("empty constraints omission", () => {
         });
     });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// Schema.validate() — 可选关闭参数校验
+// ═══════════════════════════════════════════════════════════════
+
+describe("Schema.validate()", () => {
+    it("defaults to validating (invalid input still fails)", () => {
+        const schema = s.string().min(3);
+        expect(() => schema.parse("ab")).toThrow(SchemaValidationError);
+        const r = schema.safeParse("ab");
+        expect(r.success).toBe(false);
+    });
+
+    it("validate(false) skips checks and returns the raw input", () => {
+        const schema = s.string().min(3).validate(false);
+        expect(schema.parse("ab")).toBe("ab");
+        expect(schema.parse(123 as unknown as string)).toBe(123);
+        const r = schema.safeParse({ not: "a string" });
+        expect(r.success).toBe(true);
+        if (r.success) expect(r.data).toEqual({ not: "a string" });
+    });
+
+    it("validate(true) restores validation after validate(false)", () => {
+        const off = s.number().min(0).validate(false);
+        expect(off.parse(-1)).toBe(-1);
+
+        const on = off.validate(true);
+        expect(() => on.parse(-1)).toThrow(SchemaValidationError);
+        expect(on.parse(1)).toBe(1);
+    });
+
+    it("is immutable: original schema is unchanged", () => {
+        const base = s.string().min(2);
+        const off = base.validate(false);
+        expect(() => base.parse("x")).toThrow(SchemaValidationError);
+        expect(off.parse("x")).toBe("x");
+        expect(base).not.toBe(off);
+    });
+
+    it("works on nested containers (array / object / union)", () => {
+        const arr = s.array(s.number()).validate(false);
+        expect(arr.parse(["not-a-number"])).toEqual(["not-a-number"]);
+
+        const obj = s
+            .object({ id: s.number() })
+            .strict()
+            .validate(false);
+        expect(obj.parse({ id: "x", extra: true })).toEqual({
+            id: "x",
+            extra: true,
+        });
+
+        const uni = s.union([s.string(), s.number()]).validate(false);
+        expect(uni.parse(true)).toBe(true);
+    });
+
+    it("toJSON omits validate when enabled (default)", () => {
+        const desc = s.string().toJSON();
+        expect(desc).not.toHaveProperty("validate");
+    });
+
+    it("toJSON includes validate: false when disabled", () => {
+        const desc = s.string().min(1).validate(false).toJSON();
+        expect(desc).toMatchObject({
+            kind: "string",
+            validate: false,
+            constraints: { min: 1 },
+        });
+    });
+
+    it("validate(false) then describe still carries validate: false", () => {
+        const desc = s
+            .number()
+            .validate(false)
+            .describe("trusted")
+            .toJSON();
+        expect(desc).toMatchObject({
+            kind: "number",
+            description: "trusted",
+            validate: false,
+        });
+    });
+
+    it("nullable + validate(false) still returns null as-is without checks", () => {
+        const schema = s.string().min(5).nullable().validate(false);
+        expect(schema.parse(null)).toBe(null);
+        expect(schema.parse("short")).toBe("short");
+    });
+});

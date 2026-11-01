@@ -616,4 +616,109 @@ export function installDemoMethods(repository: Repository): void {
             }
         },
     );
+
+    // ─────────────────────────────────────────────────────────────
+    // 14. validate(false)：只描述、不校验
+    // ─────────────────────────────────────────────────────────────
+    // Schema 同时用于签名描述与运行时校验。默认两者都开；
+    // .validate(false) 后 convertParams 仍接受任意 JSON，但
+    // system.methodSignature / WebUI 仍展示完整类型信息。
+
+    // 14.1 对比：同一形状，一边校验一边不校验
+    repository.register(
+        {
+            namespace: 'validate.on',
+            document:
+                '默认开启校验：params[0] 必须是非空字符串，否则 INVALID_PARAMS。',
+            signature: [
+                s.string().describe('回显'),
+                s.string().min(1).max(32).describe('非空短字符串'),
+            ],
+        },
+        (msg: string) => msg,
+    );
+
+    repository.register(
+        {
+            namespace: 'validate.off',
+            document:
+                '与 validate.on 同形，但参数 schema 关闭了运行时校验。' +
+                '任意 JSON 都能进 handler；类型信息仍出现在 methodSignature / WebUI。',
+            signature: [
+                s.unknown().describe('原样返回（可能并非 string）'),
+                s
+                    .string()
+                    .min(1)
+                    .max(32)
+                    .describe('文档上仍是非空短字符串')
+                    .validate(false),
+            ],
+        },
+        (msg: unknown) => msg,
+    );
+
+    // 14.2 对象：严格描述 + 关闭校验（信任上游已洗过数据）
+    repository.register(
+        {
+            namespace: 'validate.offObject',
+            document:
+                '对象签名写了 strict，但 validate(false)：缺字段 / 多余字段 / 类型错误都不会在 convertParams 阶段失败。',
+            signature: [
+                s.unknown(),
+                s
+                    .object({
+                        id: s.number().describe('用户 ID'),
+                        name: s.string().min(1).describe('名称'),
+                    })
+                    .strict()
+                    .describe('文档上的严格用户对象')
+                    .validate(false),
+            ],
+        },
+        (payload: unknown) => payload,
+    );
+
+    // 14.3 嵌套：仅内层关闭校验
+    repository.register(
+        {
+            namespace: 'validate.nestedPartial',
+            document:
+                '外层 array 仍校验「必须是数组」；元素 schema 关闭校验，元素内容任意。',
+            signature: [
+                s.array(s.unknown()).describe('原样返回'),
+                s
+                    .array(
+                        s
+                            .object({
+                                code: s.string().min(1),
+                                qty: s.number().min(0),
+                            })
+                            .strict()
+                            .validate(false),
+                    )
+                    .min(1)
+                    .describe('至少 1 个元素；元素内部不校验'),
+            ],
+        },
+        (items: unknown[]) => items,
+    );
+
+    // 14.4 可再打开：链式 validate(false).validate(true) 与默认等价（演示可撤销）
+    repository.register(
+        {
+            namespace: 'validate.reenabled',
+            document:
+                '先 validate(false) 再 validate(true)，效果与默认开启校验相同。',
+            signature: [
+                s.number().describe('原样数字'),
+                s
+                    .number()
+                    .min(0)
+                    .describe('非负数字')
+                    .validate(false)
+                    .validate(true),
+            ],
+        },
+        (n: number) => n,
+    );
 }

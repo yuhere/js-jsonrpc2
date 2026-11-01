@@ -9204,7 +9204,8 @@ var KIND_COLORS$1 = {
 	enum: "var(--syn-union)",
 	unknown: "var(--syn-muted)",
 	null: "var(--syn-muted)",
-	stream: "var(--syn-container)"
+	stream: "var(--syn-container)",
+	void: "var(--syn-muted)"
 };
 function colorOf$1(kind) {
 	return KIND_COLORS$1[kind] ?? "var(--fg)";
@@ -9214,21 +9215,37 @@ function formatConstraints$1(constraints) {
 	if (!constraints) return "";
 	const entries = Object.entries(constraints).filter(([, v]) => v !== void 0);
 	if (entries.length === 0) return "";
-	return entries.map(([k, v]) => `${k}=${typeof v === "string" ? JSON.stringify(v) : JSON.stringify(v)}`).join(", ");
+	return entries.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ");
+}
+function isSchemaDescription(v) {
+	return !!v && typeof v === "object" && typeof v.kind === "string";
+}
+function hasChildNodes(schema) {
+	switch (schema.kind) {
+		case "array": return isSchemaDescription(schema.element);
+		case "record": return isSchemaDescription(schema.value);
+		case "tuple": return Array.isArray(schema.elements) && schema.elements.some(isSchemaDescription);
+		case "union": return Array.isArray(schema.options) && schema.options.some(isSchemaDescription);
+		case "object": return !!schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties) && Object.values(schema.properties).some(isSchemaDescription);
+		case "stream": return !!(isSchemaDescription(schema.inner) ? schema.inner : void 0);
+		default: return false;
+	}
 }
 function SchemaNode({ schema, depth, defaultOpen, label }) {
 	const t = useT();
 	const [open, setOpen] = (0, import_react.useState)(defaultOpen);
-	const hasChildren = hasChildNodes(schema);
+	const anySchema = schema;
+	const expandable = hasChildNodes(anySchema);
 	const constraintsText = formatConstraints$1(schema.constraints);
+	const validationOff = anySchema.validate === false;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "schema-node",
 		style: { paddingLeft: depth * 14 },
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "schema-head",
-			onClick: () => hasChildren && setOpen((o) => !o),
+			onClick: () => expandable && setOpen((o) => !o),
 			children: [
-				hasChildren ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				expandable ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 					className: "schema-expander",
 					children: open ? "▾" : "▸"
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "schema-expander" }),
@@ -9249,77 +9266,52 @@ function SchemaNode({ schema, depth, defaultOpen, label }) {
 					className: "schema-nullable-badge",
 					children: "nullable"
 				}),
-				constraintsText && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				validationOff && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "schema-nullable-badge",
+					title: t("schema.validationOff"),
+					children: "no-validate"
+				}),
+				constraintsText ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 					className: "schema-constraints",
 					children: `{ ${constraintsText} }`
-				}),
-				schema.description && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+				}) : null,
+				schema.description ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 					className: "schema-description",
-					title: schema.description,
-					children: [
-						" ",
-						"// ",
-						schema.description
-					]
-				})
+					children: ["— ", schema.description]
+				}) : null
 			]
-		}), open && hasChildren && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		}), expandable && open && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 			className: "schema-children",
-			children: renderChildren(schema, depth + 1, t)
+			children: renderChildren(anySchema, depth + 1, t)
 		})]
 	});
 }
-function isSchemaDescription(v) {
-	return !!v && typeof v === "object" && typeof v.kind === "string";
-}
-/** 是否存在可展开的子节点（新结构 + stream 的兼容路径） */
-function hasChildNodes(schema) {
-	switch (schema.kind) {
-		case "array": return isSchemaDescription(schema.element);
-		case "record": return isSchemaDescription(schema.value);
-		case "tuple": {
-			const els = schema.elements;
-			return Array.isArray(els) && els.some(isSchemaDescription);
-		}
-		case "union": {
-			const opts = schema.options;
-			return Array.isArray(opts) && opts.some(isSchemaDescription);
-		}
-		case "object": {
-			const props = schema.properties;
-			return !!props && typeof props === "object" && !Array.isArray(props) && Object.keys(props).length > 0;
-		}
-		case "stream": {
-			const any = schema;
-			return isSchemaDescription(any.inner) || isSchemaDescription(any.children?.inner);
-		}
-		default: return false;
-	}
-}
+/**
+* 子节点渲染约定：
+* - array / record / stream：直接展开，不挂 element / value / inner 标签
+* - object：属性名作标签
+* - union：option[i]
+* - tuple：[i]
+*/
 function renderChildren(schema, depth, t) {
 	const out = [];
 	switch (schema.kind) {
-		case "array": {
-			const element = schema.element;
-			if (isSchemaDescription(element)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
-				schema: element,
+		case "array":
+			if (isSchemaDescription(schema.element)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
+				schema: schema.element,
 				depth,
 				defaultOpen: true
 			}, "element"));
 			break;
-		}
-		case "record": {
-			const value = schema.value;
-			if (isSchemaDescription(value)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
-				schema: value,
+		case "record":
+			if (isSchemaDescription(schema.value)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
+				schema: schema.value,
 				depth,
 				defaultOpen: true
 			}, "value"));
 			break;
-		}
-		case "tuple": {
-			const elements = schema.elements;
-			if (Array.isArray(elements)) elements.forEach((item, i) => {
+		case "tuple":
+			if (Array.isArray(schema.elements)) schema.elements.forEach((item, i) => {
 				if (isSchemaDescription(item)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
 					schema: item,
 					depth,
@@ -9328,10 +9320,8 @@ function renderChildren(schema, depth, t) {
 				}, `el-${i}`));
 			});
 			break;
-		}
-		case "union": {
-			const options = schema.options;
-			if (Array.isArray(options)) options.forEach((opt, i) => {
+		case "union":
+			if (Array.isArray(schema.options)) schema.options.forEach((opt, i) => {
 				if (isSchemaDescription(opt)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
 					schema: opt,
 					depth,
@@ -9340,7 +9330,6 @@ function renderChildren(schema, depth, t) {
 				}, `opt-${i}`));
 			});
 			break;
-		}
 		case "object": {
 			const props = schema.properties;
 			if (props && typeof props === "object" && !Array.isArray(props)) {
@@ -9354,8 +9343,7 @@ function renderChildren(schema, depth, t) {
 			break;
 		}
 		case "stream": {
-			const any = schema;
-			const inner = isSchemaDescription(any.inner) ? any.inner : isSchemaDescription(any.children?.inner) ? any.children.inner : void 0;
+			const inner = isSchemaDescription(schema.inner) ? schema.inner : void 0;
 			if (inner) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
 				schema: inner,
 				depth,
@@ -10685,7 +10673,7 @@ function Footer() {
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 			className: "footer-version",
 			title: t("footer.version"),
-			children: ["v", "2.1.14"]
+			children: ["v", "2.1.15"]
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "footer-links",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
@@ -10797,12 +10785,14 @@ async function collectApiDoc(rpc, methods, onProgress) {
 * - object：属性名作标签
 * - union：option[i]
 * - tuple：[i]
+* - validate === false 时在行尾标注 _(no validate)_
 */
 function renderSchemaTree(schema, indent = 0) {
 	const pad = "  ".repeat(indent);
 	const lines = [];
 	let head = `${pad}- \`${schema.kind}\``;
 	if (schema.nullable) head += " _(nullable)_";
+	if (schema.validate === false) head += " _(no validate)_";
 	if (schema.description) head += ` — ${schema.description}`;
 	const c = schema.constraints;
 	if (c && Object.keys(c).length > 0) {
@@ -10856,7 +10846,7 @@ function renderSchemaTree(schema, indent = 0) {
 		}
 		case "stream": {
 			const any = schema;
-			const inner = isSchema(any.inner) ? any.inner : isSchema(any.children?.inner) ? any.children.inner : void 0;
+			const inner = isSchema(any.inner) ? any.inner : void 0;
 			if (inner) pushPlain(inner);
 			break;
 		}
@@ -11101,4 +11091,4 @@ function App() {
 import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(I18nProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }) }));
 //#endregion
 
-//# sourceMappingURL=index-mYqtDOwe.js.map
+//# sourceMappingURL=index-WpdfQ_L9.js.map

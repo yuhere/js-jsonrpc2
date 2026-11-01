@@ -30,8 +30,26 @@ Hard constraints (by design, do not work around):
    `s.literal(v)` (`v` is `string | number | boolean` only), `s.null()`,
    `s.array(item)`, `s.object(shape)`, `s.record(v)`, `s.union([...])`,
    `s.tuple([...])`, `s.enum([...])`, `s.unknown()`.
-7. Chain modifiers before registering: `.min()`, `.max()`, `.nullable(bool)`,
-   `.strict()`, `.describe(text)`.
+7. Chain modifiers before registering:
+   - Bounds / docs: `.min()`, `.max()`, `.describe(text)`.
+   - Nullability: `.nullable()` / `.nullable(true)` / `.nullable(false)` (immutable).
+   - Validation gate: `.validate(true|false)` (immutable; default **on**).
+     - Schemas serve two roles: **describe** the RPC signature and **validate**
+       client params at runtime.
+     - `.validate(false)` keeps the schema in `signature` / `system.methodSignature`
+       / WebUI / docs, but `parse` / `safeParse` become no-ops (return the input
+       unchanged). `convertParams` therefore will not reject bad values for that
+       slot.
+     - Prefer this only when a param is intentionally untrusted-schema or
+       validated elsewhere; do not use it as a substitute for `s.unknown()`.
+   - Object shape control:
+     - Default object is **permissive**: every declared key may be missing;
+       undeclared keys are kept if they are valid JSON.
+     - `.optionalProperties(keys)` — whitelist of declared keys that may be
+       missing (unknown names throw `TypeError`).
+     - `.allowUnknownProperties(bool)` — keep (`true`) or reject (`false`) extras.
+     - `.strict()` / `.strict(true)` — no missing declared keys + reject extras.
+     - `.strict(false)` — restore the default permissive config.
 8. Nullability rules:
    - `.nullable()` / `.nullable(true)` allow `null`; `.nullable(false)` clears it. Calls are immutable.
    - `s.unknown()` and `s.null()` already handle `null`; they do not expose `.nullable()`.
@@ -46,6 +64,57 @@ repository.register(
   { namespace: 'add', document: 'a + b', signature: [s.number(), s.number(), s.number()] },
   (a: number, b: number) => a + b,
 );
+
+// Describe shape for clients / WebUI, but skip runtime checks on this param:
+repository.register(
+  {
+    namespace: 'legacy.passthrough',
+    signature: [
+      s.unknown(),
+      s.object({ id: s.number(), tags: s.array(s.string()) }).validate(false),
+    ],
+  },
+  (payload) => payload,
+);
+```
+
+### Schema descriptions (`toJSON` / `system.methodSignature`)
+
+Ordinary schemas use a discriminated union on `kind`. There is **no** generic
+`children` bag:
+
+| kind | Child field(s) |
+| --- | --- |
+| `array` | `element` |
+| `record` | `value` |
+| `object` | `properties` |
+| `union` | `options` |
+| `tuple` | `elements` |
+
+Object constraints in the description:
+
+```ts
+constraints: {
+  optionalProps: string[];
+  allowUnknownProps: boolean;
+}
+```
+
+Empty constraint objects are omitted (no `constraints: {}`).
+
+When validation is turned off, the description includes an explicit flag
+(default is on and omitted to keep noise low):
+
+```ts
+{ kind: 'object', validate: false, properties: { ... } }
+```
+
+Do **not** read legacy paths such as `children.items` or `children.values`.
+
+Stream returns are the exception (marker path in `signatureOf`):
+
+```ts
+{ kind: 'stream', inner: <SchemaDescription> }
 ```
 
 ## Stream a return value
@@ -205,8 +274,17 @@ Keep `withSystemMethods` on (default) to expose `system.listMethods`,
 `system.methodSignature`, `system.methodHelp`. Set `document` on a descriptor
 so `system.methodHelp` returns useful text.
 
-`system.methodSignature` reports a stream return as
-`{ kind: 'stream', children: { inner: <schema> } }`.
+`system.methodSignature` reports ordinary containers with semantic fields
+(`element` / `value` / `properties` / `options` / `elements`). A stream return
+is reported as:
+
+```ts
+{ kind: 'stream', children: { inner: <schema> } }
+```
+
+Schemas with `.validate(false)` appear with `validate: false` in the signature
+description so clients and the WebUI can show that the server will not enforce
+that slot at runtime.
 
 ## Common mistakes
 
@@ -253,3 +331,16 @@ so `system.methodHelp` returns useful text.
 - **Calling `s.literal(null)`.** `literal` only accepts `string | number |
   boolean`; construction throws `TypeError`. Use `s.null()` for exact null, or
   `.nullable()` for "literal or null".
+- **Treating default `s.object(...)` as strict.** By default all declared keys
+  may be missing and unknown keys are kept. Use `.strict()` or
+  `.optionalProperties` / `.allowUnknownProperties` for tighter rules.
+- **Reading schema descriptions via `children.items` / `children.values`.**
+  Those paths are gone. Use `element`, `value`, `properties`, `options`,
+  `elements`. Only stream markers still use `children.inner`.
+- **Assuming `.validate(false)` still type-checks or coerces.** It only skips
+  runtime validation; TypeScript types and the published description stay as
+  declared. Use `s.unknown()` when the value truly has no schema.
+- **Turning off validation on the return schema and expecting the server to
+  enforce the handler result.** Return schemas are for description / WebUI;
+  the server does not re-validate handler return values against them (except
+  stream declaration checks for `AsyncGenerator`).

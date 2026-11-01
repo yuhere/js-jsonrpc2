@@ -92,4 +92,64 @@ describe('convertParams', () => {
         await expect(convertParams(d, [null], {})).rejects.toMatchObject({ code: INVALID_PARAMS });
     });
 
+    // ── validate(false)：跳过参数校验 ─────────────────────────────
+
+    it('skips validation when schema uses validate(false)', async () => {
+        const descriptor = buildDescriptor(
+            {
+                namespace: 'trust',
+                signature: [
+                    s.unknown(),
+                    s.number().min(0).validate(false),
+                    s.string().min(3).validate(false),
+                ],
+            },
+            (n: unknown, s: unknown) => [n, s],
+        );
+        // 未开启 validate(false) 时会失败的值，现在应原样通过
+        await expect(convertParams(descriptor, [-1, 'ab'], {})).resolves.toEqual([
+            -1,
+            'ab',
+        ]);
+    });
+
+    it('still validates sibling params that keep default validate(true)', async () => {
+        const descriptor = buildDescriptor(
+            {
+                namespace: 'mixed',
+                signature: [
+                    s.unknown(),
+                    s.number().validate(false),
+                    s.string().min(2),
+                ],
+            },
+            (n: unknown, s: string) => [n, s],
+        );
+        // 第二个参数不校验；第三个仍校验
+        await expect(convertParams(descriptor, [0, 'x'], {})).rejects.toMatchObject({
+            code: INVALID_PARAMS,
+        });
+        await expect(convertParams(descriptor, [0, 'ok'], {})).resolves.toEqual([0, 'ok']);
+    });
+
+    it('validate(false) does not change arity or injectable rules', async () => {
+        const descriptor = buildDescriptor(
+            {
+                namespace: 'arity',
+                signature: [
+                    s.string(),
+                    s.string().validate(false),
+                    s.injectable('requestId'),
+                ],
+            },
+            (msg: string, requestId: unknown) => `${msg}:${String(requestId)}`,
+        );
+        await expect(convertParams(descriptor, [], { requestId: 'r' })).rejects.toMatchObject({
+            code: INVALID_PARAMS,
+        });
+        await expect(
+            convertParams(descriptor, ['anything'], { requestId: 'r' }),
+        ).resolves.toEqual(['anything', 'r']);
+    });
+
 });
