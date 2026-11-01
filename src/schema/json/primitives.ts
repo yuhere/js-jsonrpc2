@@ -447,13 +447,12 @@ export type ObjectOutput<S extends ObjectShape> = {
 export class ObjectSchema<S extends ObjectShape> extends NullableSchema<ObjectOutput<S>> {
   readonly kind = "object" as const;
 
-  private optionalProps: string[];
+  private optionalProps: string[] = [];
 
-  private allowUnknownProps: boolean = true;
+  private allowUnknownProps: boolean = false;
 
   constructor(private readonly shape: S) {
     super();
-    this.optionalProps = Object.keys(shape);
   }
 
   optionalProperties(keys: string[]): this {

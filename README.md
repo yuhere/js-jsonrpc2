@@ -112,7 +112,7 @@ s.boolean()                // boolean
 s.literal('2.0')           // exact literal (string | number | boolean only)
 s.null()                   // exactly null
 s.array(s.string())        // string[]
-s.object({ id: s.number() })          // open object (default: all props optional, extra props kept)
+s.object({ id: s.number() })
 s.object({ id: s.number() }).strict() // all declared props required, no extras
 s.record(s.number())       // Record<string, number>
 s.union([s.string(), s.number()])

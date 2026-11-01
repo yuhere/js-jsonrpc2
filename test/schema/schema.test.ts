@@ -218,24 +218,21 @@ describe("ObjectSchema", () => {
         });
     });
 
-    it("allows missing declared properties by default", () => {
-        expect(schema.parse({ name: "Alice" })).toEqual({
-            name: "Alice",
+    it("requires all declared properties by default", () => {
+        expect(schema.parse({ name: "Alice", age: 12 })).toEqual({
+            name: "Alice", age: 12
         });
 
-        expect(schema.parse({})).toEqual({});
+        expect(() => schema.parse({})).toThrow();
     });
 
-    it("allows and preserves extra JSON properties by default", () => {
+    it("rejects extra properties by default", () => {
         expect(
-            schema.parse({
+            () => schema.parse({
                 name: "Alice",
                 extra: { enabled: true },
-            }),
-        ).toEqual({
-            name: "Alice",
-            extra: { enabled: true },
-        });
+            })
+        ).toThrow(SchemaValidationError);
     });
 
     it("rejects invalid declared properties", () => {
@@ -322,7 +319,7 @@ describe("ObjectSchema", () => {
         });
     });
 
-    it("strict(false) restores the default permissive behavior", () => {
+    it("strict(false) restores permissive behavior (all optional + allow unknown)", () => {
         const schema = s.object({ name: s.string(), age: s.number() });
         const reopened = schema.strict().strict(false);
 
@@ -369,14 +366,14 @@ describe("ObjectSchema", () => {
         });
     });
 
-    it("describes default optionalProps as all declared keys", () => {
+    it("describes default constraints as all required and no unknown props", () => {
         expect(
             s.object({ name: s.string(), age: s.number() }).toJSON(),
         ).toMatchObject({
             kind: "object",
             constraints: {
-                optionalProps: ["name", "age"],
-                allowUnknownProps: true,
+                optionalProps: [],
+                allowUnknownProps: false,
             },
             properties: {
                 name: { kind: "string" },
@@ -398,7 +395,7 @@ describe("ObjectSchema", () => {
             SchemaValidationError,
         );
 
-        const open = s.object({ name: s.string() });
+        const open = s.object({ name: s.string() }).optionalProperties(["name"]).allowUnknownProperties(true);
         expect(open.parse({ toString: "x" })).toEqual({ toString: "x" });
         expect(open.parse({ constructor: 1 })).toEqual({ constructor: 1 });
     });
@@ -531,7 +528,7 @@ describe("UnionSchema member nullability stripping", () => {
 
 
 describe("TupleSchema", () => {
-    it("test 1", () => {
+    it("validates length and each positional element", () => {
         const schema = s.tuple([
             s.string(),
             s.number(),

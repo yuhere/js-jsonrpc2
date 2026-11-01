@@ -41,27 +41,26 @@ describe("immutable schema modifiers", () => {
     const strict = base.strict();
 
     expect(strict).not.toBe(base);
-    expect(base.parse({})).toEqual({});
+    expect(base.parse({ name: "a" })).toEqual({ name: "a" });
     expect(() => strict.parse({})).toThrow(SchemaValidationError);
     expect(() => strict.parse({ name: "Ada", extra: true })).toThrow(
       SchemaValidationError,
     );
     expect(strict.toJSON().description).toBe("User");
 
-    // 默认宽松：所有已声明属性可缺失，允许未声明属性。
+    // 默认已是「全必填 + 拒未知」，与 strict() 的 constraints 一致
     expect(base.toJSON().constraints).toEqual({
-      optionalProps: ["name"],
-      allowUnknownProps: true,
+      optionalProps: [],
+      allowUnknownProps: false,
     });
 
-    // strict 收紧：无可缺失属性，拒绝未声明属性。
     expect(strict.toJSON().constraints).toEqual({
       optionalProps: [],
       allowUnknownProps: false,
     });
   });
 
-  it("strict(false) restores the default permissive configuration", () => {
+  it("strict(false) restores the permissive configuration", () => {
     const base = s.object({ name: s.string() }).strict();
     const relaxed = base.strict(false);
 
@@ -74,14 +73,14 @@ describe("immutable schema modifiers", () => {
     expect(relaxed.parse({ extra: true })).toEqual({ extra: true });
   });
 
-  it("optionalProperties narrows the missing-allowed set", () => {
+  it("optionalProperties sets the missing-allowed whitelist", () => {
     const base = s.object({ a: s.string(), b: s.number() });
     const partial = base.optionalProperties(["a"]);
 
     expect(partial).not.toBe(base);
     expect(partial.toJSON().constraints).toEqual({
       optionalProps: ["a"],
-      allowUnknownProps: true,
+      allowUnknownProps: false,
     });
     expect(partial.parse({ a: "x", b: 1 })).toEqual({ a: "x", b: 1 });
     expect(partial.parse({ b: 1 })).toEqual({ b: 1 });
@@ -95,16 +94,16 @@ describe("immutable schema modifiers", () => {
     expect(() => base.optionalProperties(["nope"])).toThrow(TypeError);
   });
 
-  it("allowUnknownProperties(false) rejects extra properties", () => {
+  it("allowUnknownProperties(false) keeps extras rejected (default is already false)", () => {
     const base = s.object({ name: s.string() });
     const closed = base.allowUnknownProperties(false);
 
     expect(closed).not.toBe(base);
     expect(closed.toJSON().constraints).toEqual({
-      optionalProps: ["name"],
+      optionalProps: [],
       allowUnknownProps: false,
     });
-    expect(closed.parse({})).toEqual({});
+    expect(() => closed.parse({})).toThrow(SchemaValidationError);
     expect(() => closed.parse({ name: "Ada", extra: true })).toThrow(
       SchemaValidationError,
     );
@@ -144,37 +143,35 @@ describe("immutable schema modifiers", () => {
     expect(() => oneKey.parse({})).toThrow(SchemaValidationError);
   });
 
-  it('nullable combines immutably with describe and min', () => {
+  it("nullable combines immutably with describe and min", () => {
     const base = s.string().min(2);
-    const nullable = base.nullable().describe('Name');
+    const nullable = base.nullable().describe("Name");
     expect(nullable).not.toBe(base);
-    expect(base.toJSON()).toMatchObject({ kind: 'string', constraints: { min: 2 } });
+    expect(base.toJSON()).toMatchObject({ kind: "string", constraints: { min: 2 } });
     expect(base.toJSON().nullable).toBeUndefined();
     expect(nullable.toJSON()).toMatchObject({
-      kind: 'string',
+      kind: "string",
       nullable: true,
-      description: 'Name',
+      description: "Name",
       constraints: { min: 2 },
     });
     expect(() => base.parse(null)).toThrow(SchemaValidationError);
     expect(nullable.parse(null)).toBe(null);
   });
 
-  it('object with s.null() property', () => {
+  it("object with s.null() property", () => {
     const schema = s.object({ n: s.null() });
     expect(schema.parse({ n: null })).toEqual({ n: null });
-    expect(schema.parse({})).toEqual({}); // 非 strict：缺失跳过
-    expect(() => schema.parse({ n: 'x' })).toThrow();
+    expect(() => schema.parse({ n: "x" })).toThrow();
   });
 
-  it('nullable(false) applies uniformly to tuple and enum', () => {
+  it("nullable(false) applies uniformly to tuple and enum", () => {
     const tuple = s.tuple([s.string()]).nullable().nullable(false);
     expect(() => tuple.parse(null)).toThrow(SchemaValidationError);
 
-    const en = s.enum(['a']).nullable().nullable(false);
+    const en = s.enum(["a"]).nullable().nullable(false);
     expect(() => en.parse(null)).toThrow(SchemaValidationError);
   });
-
 });
 
 // Compile-time sanity check: strict() returns ObjectSchema<S> (no extra Strict type parameter).

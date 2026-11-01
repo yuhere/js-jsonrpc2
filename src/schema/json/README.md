@@ -109,10 +109,10 @@ s.string().nullable().nullable(false); // string
 
 ### 3.4 对象：`optionalProperties` / `allowUnknownProperties` / `strict`
 
-默认对象配置是**宽松**的：
+默认对象配置是**严谨**的：
 
-- `optionalProps` 默认 = `Object.keys(shape)`（已声明属性均可缺失）。
-- `allowUnknownProps` 默认 = `true`（未声明属性保留）。
+- `optionalProps` 默认 = `[]`（不可缺失任何属性）。
+- `allowUnknownProps` 默认 = `false`（不允许未声明属性保留）。
 
 ```ts
 s.object({ name: s.string() });
