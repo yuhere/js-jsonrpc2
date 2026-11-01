@@ -13,20 +13,49 @@ export type JSONValue =
 
 export type SchemaKind = string;
 
-export interface SchemaDescription {
+export interface BaseSchemaDescription {
   kind: SchemaKind;
   description?: string;
-  /**
-   * 该值是否允许为 null。
-   *
-   * 唯一真相来源：由 `NullableSchema` 及其子类通过 `.nullable(bool)` 设置，
-   * `UnknownSchema` / `NullSchema` 不使用该字段（它们本身就接受 null）。
-   * `kind` 永远表示值的真实形状，不会被 nullability 污染。
-   */
   nullable?: boolean;
   constraints?: Record<string, unknown>;
-  children?: Record<string, unknown>;
 }
+
+export interface LeafSchemaDescription extends BaseSchemaDescription {
+  kind: "string" | "number" | "boolean" | "literal" | "enum" | "unknown" | "null";
+}
+
+export interface ObjectSchemaDescription extends BaseSchemaDescription {
+  kind: "object";
+  properties: Record<string, SchemaDescription>;
+}
+
+export interface ArraySchemaDescription extends BaseSchemaDescription {
+  kind: "array";
+  element: SchemaDescription;
+}
+
+export interface RecordSchemaDescription extends BaseSchemaDescription {
+  kind: "record";
+  value: SchemaDescription;
+}
+
+export interface UnionSchemaDescription extends BaseSchemaDescription {
+  kind: "union";
+  options: SchemaDescription[];
+}
+
+export interface TupleSchemaDescription extends BaseSchemaDescription {
+  kind: "tuple";
+  elements: SchemaDescription[];
+}
+
+export type SchemaDescription =
+  | LeafSchemaDescription
+  | ObjectSchemaDescription
+  | ArraySchemaDescription
+  | RecordSchemaDescription
+  | UnionSchemaDescription
+  | TupleSchemaDescription;
 
 export class SchemaValidationError extends Error {
   constructor(
@@ -48,11 +77,7 @@ export class SchemaValidationError extends Error {
 export abstract class Schema<T> {
   abstract readonly kind: SchemaKind;
 
-  private description?: string | undefined;
-
-  constructor(description?: string) {
-    this.description = description;
-  }
+  private description: string = "";
 
   describe(description: string): this {
     return this.cloneWith({ description });
@@ -70,7 +95,7 @@ export abstract class Schema<T> {
     return Object.assign(clone, updates) as this;
   }
 
-  getDescription(): string | undefined {
+  getDescription(): string {
     return this.description;
   }
 
@@ -190,13 +215,15 @@ export class StringSchema<K extends string = "string"> extends NullableSchema<st
     return input;
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): LeafSchemaDescription {
+    const constraints = buildConstraints({
+      min: this.minimum,
+      max: this.maximum,
+    });
+
     return {
-      kind: this.kind,
-      constraints: {
-        ...(this.minimum !== undefined ? { min: this.minimum } : {}),
-        ...(this.maximum !== undefined ? { max: this.maximum } : {}),
-      },
+      kind: this.kind as LeafSchemaDescription["kind"],
+      ...(constraints ? { constraints } : {}),
     };
   }
 
@@ -243,13 +270,15 @@ export class NumberSchema extends NullableSchema<number> {
     return input;
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): LeafSchemaDescription {
+    const constraints = buildConstraints({
+      min: this.minimum,
+      max: this.maximum,
+    });
+
     return {
       kind: this.kind,
-      constraints: {
-        ...(this.minimum !== undefined ? { min: this.minimum } : {}),
-        ...(this.maximum !== undefined ? { max: this.maximum } : {}),
-      },
+      ...(constraints ? { constraints } : {}),
     };
   }
 
@@ -275,17 +304,11 @@ export class BooleanSchema extends NullableSchema<boolean> {
     return input;
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): LeafSchemaDescription {
     return { kind: this.kind };
   }
 }
 
-/**
- * 字面量只支持 string / number / boolean。
- *
- * null 由 `s.null()` 表达；需要「该字面量或 null」时，对字面量调用
- * `.nullable()`。`literal(null)` 会抛 TypeError。
- */
 export type LiteralValue = string | number | boolean;
 
 export class LiteralSchema<
@@ -318,7 +341,7 @@ export class LiteralSchema<
     return this.expected;
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): LeafSchemaDescription {
     return {
       kind: this.kind,
       constraints: { value: this.expected },
@@ -375,14 +398,16 @@ export class ArraySchema<T> extends NullableSchema<T[]> {
     });
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): ArraySchemaDescription {
+    const constraints = buildConstraints({
+      min: this.minimum,
+      max: this.maximum,
+    });
+
     return {
       kind: this.kind,
-      constraints: {
-        ...(this.minimum !== undefined ? { min: this.minimum } : {}),
-        ...(this.maximum !== undefined ? { max: this.maximum } : {}),
-      },
-      children: { items: this.itemSchema.toJSON() },
+      ...(constraints ? { constraints } : {}),
+      element: this.itemSchema.toJSON(),
     };
   }
 
@@ -397,44 +422,45 @@ export type ObjectShape = Record<string, Schema<unknown>>;
 
 type SchemaValue<S> = S extends Schema<infer T> ? T : never;
 
-type ShapeOutput<S extends ObjectShape> = {
-  [K in keyof S]: SchemaValue<S[K]>;
-};
-
-type OptionalShapeOutput<S extends ObjectShape> = {
+export type ObjectOutput<S extends ObjectShape> = {
   [K in keyof S]?: SchemaValue<S[K]>;
 };
 
-export class ObjectSchema<
-  S extends ObjectShape,
-  Strict extends boolean = false,
-> extends NullableSchema<
-  Strict extends true ? ShapeOutput<S> : OptionalShapeOutput<S>
-> {
+export class ObjectSchema<S extends ObjectShape> extends NullableSchema<ObjectOutput<S>> {
   readonly kind = "object" as const;
 
-  private isStrict: boolean;
+  private optionalProps: string[];
 
-  constructor(
-    private readonly shape: S,
-    strict: Strict = false as Strict,
-    description?: string,
-  ) {
-    super(description);
-    this.isStrict = strict;
+  private allowUnknownProps: boolean = true;
+
+  constructor(private readonly shape: S) {
+    super();
+    this.optionalProps = Object.keys(shape);
   }
 
-  /**
-   * strict() 要求所有声明属性存在，并拒绝未声明属性。
-   */
-  strict(): ObjectSchema<S, true> {
-    return new ObjectSchema<S, true>(this.shape, true, this.getDescription());
+  optionalProperties(keys: string[]): this {
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(this.shape, key)) {
+        throw new TypeError(
+          `optionalProperties: unknown property "${key}"`,
+        );
+      }
+    }
+    return this.cloneWith({ optionalProps: [...new Set(keys)] });
   }
 
-  protected _parseValue(
-    input: unknown,
-    path: string[],
-  ): Strict extends true ? ShapeOutput<S> : OptionalShapeOutput<S> {
+  allowUnknownProperties(value: boolean = true): this {
+    return this.cloneWith({ allowUnknownProps: value });
+  }
+
+  strict(value: boolean = true): this {
+    if (value) {
+      return this.optionalProperties([]).allowUnknownProperties(false);
+    }
+    return this.optionalProperties(Object.keys(this.shape)).allowUnknownProperties(true);
+  }
+
+  protected _parseValue(input: unknown, path: string[]): ObjectOutput<S> {
     if (
       input === null ||
       typeof input !== "object" ||
@@ -445,10 +471,11 @@ export class ObjectSchema<
 
     const source = input as Record<string, unknown>;
     const output: Record<string, unknown> = {};
+    const optional = new Set(this.optionalProps);
 
-    if (this.isStrict) {
+    if (!this.allowUnknownProps) {
       for (const key of Object.keys(source)) {
-        if (!(key in this.shape)) {
+        if (!Object.prototype.hasOwnProperty.call(this.shape, key)) {
           this.fail(`Unknown property "${key}"`, [...path, key]);
         }
       }
@@ -456,7 +483,7 @@ export class ObjectSchema<
 
     for (const [key, schema] of Object.entries(this.shape)) {
       if (!Object.prototype.hasOwnProperty.call(source, key)) {
-        if (this.isStrict) {
+        if (!optional.has(key)) {
           this.fail(`Missing required property "${key}"`, [...path, key]);
         }
 
@@ -477,33 +504,31 @@ export class ObjectSchema<
       }
     }
 
-    // 非 strict 模式允许额外属性，并保留这些属性。
-    if (!this.isStrict) {
+    if (this.allowUnknownProps) {
       for (const [key, value] of Object.entries(source)) {
-        if (!(key in this.shape)) {
+        if (!Object.prototype.hasOwnProperty.call(this.shape, key)) {
           assertJSONValue(value, [...path, key]);
           output[key] = value;
         }
       }
     }
 
-    return output as Strict extends true
-      ? ShapeOutput<S>
-      : OptionalShapeOutput<S>;
+    return output as ObjectOutput<S>;
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): ObjectSchemaDescription {
     return {
       kind: this.kind,
-      constraints: { strict: this.isStrict },
-      children: {
-        properties: Object.fromEntries(
-          Object.entries(this.shape).map(([key, schema]) => [
-            key,
-            schema.toJSON(),
-          ]),
-        ),
+      constraints: {
+        optionalProps: [...this.optionalProps],
+        allowUnknownProps: this.allowUnknownProps,
       },
+      properties: Object.fromEntries(
+        Object.entries(this.shape).map(([key, schema]) => [
+          key,
+          schema.toJSON(),
+        ]),
+      ),
     };
   }
 }
@@ -567,14 +592,16 @@ export class RecordSchema<T> extends NullableSchema<Record<string, T>> {
     return output;
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): RecordSchemaDescription {
+    const constraints = buildConstraints({
+      min: this.minimum,
+      max: this.maximum,
+    });
+
     return {
       kind: this.kind,
-      constraints: {
-        ...(this.minimum !== undefined ? { min: this.minimum } : {}),
-        ...(this.maximum !== undefined ? { max: this.maximum } : {}),
-      },
-      children: { values: this.valueSchema.toJSON() },
+      ...(constraints ? { constraints } : {}),
+      value: this.valueSchema.toJSON(),
     };
   }
 
@@ -585,16 +612,7 @@ export class RecordSchema<T> extends NullableSchema<Record<string, T>> {
   }
 }
 
-/**
- * 联合。
- *
- * 传入的 member schemas 会被 clone 并 `nullable(false)`——因为「某个
- * 分支允许 null」这件事在 union 层面没有意义：null 是否允许应通过
- * `union(...).nullable()` 统一表达。
- */
-export class UnionSchema<
-  const S extends readonly [Schema<unknown>, ...Schema<unknown>[]],
-> extends NullableSchema<SchemaValue<S[number]>> {
+export class UnionSchema<const S extends readonly [Schema<unknown>, ...Schema<unknown>[]]> extends NullableSchema<SchemaValue<S[number]>> {
   readonly kind = "union" as const;
 
   private readonly options: Schema<unknown>[];
@@ -635,12 +653,10 @@ export class UnionSchema<
     );
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): UnionSchemaDescription {
     return {
       kind: this.kind,
-      children: {
-        options: this.options.map((schema) => schema.toJSON()),
-      },
+      options: this.options.map((schema) => schema.toJSON()),
     };
   }
 }
@@ -676,7 +692,10 @@ export class TupleSchema<
         result.push(schema.parse(input[i]) as SchemaValue<S[number]>);
       } catch (error) {
         if (error instanceof SchemaValidationError) {
-          return this.fail(error.message, [...path, "" + i]);
+          throw new SchemaValidationError(error.message, [
+            String(i),
+            ...error.path,
+          ]);
         }
         throw error;
       }
@@ -684,22 +703,14 @@ export class TupleSchema<
     return result;
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): TupleSchemaDescription {
     return {
       kind: this.kind,
-      children: {
-        items: this.schemas.map((schema) => schema.toJSON()),
-      },
+      elements: this.schemas.map((schema) => schema.toJSON()),
     };
   }
 }
 
-/**
- * 字符串枚举。
- *
- * 继承 `NullableSchema`，因此可以 `s.enum([...]).nullable()`；
- * 它不包含嵌套 schema，所以不需要像 union 那样处理成员 nullability。
- */
 export class EnumSchema<
   const T extends readonly [string, ...string[]],
 > extends NullableSchema<T[number]> {
@@ -723,7 +734,7 @@ export class EnumSchema<
     return input as T[number];
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): LeafSchemaDescription {
     return {
       kind: this.kind,
       constraints: { values: [...this.values] },
@@ -731,13 +742,6 @@ export class EnumSchema<
   }
 }
 
-/**
- * 校验任意 JSON 值。
- *
- * 不允许 undefined、非有限数字、循环引用等非 JSON 数据。
- * null 本身就在接受范围内，因此不继承 `NullableSchema`，也不提供
- * `.nullable()`——那是冗余的。
- */
 export class UnknownSchema extends Schema<JSONValue> {
   readonly kind = "unknown" as const;
 
@@ -750,17 +754,11 @@ export class UnknownSchema extends Schema<JSONValue> {
     return input;
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): LeafSchemaDescription {
     return { kind: this.kind };
   }
 }
 
-/**
- * 精确的 null 值。
- *
- * 与 `UnknownSchema` 一样天然表达 null，不需要 `.nullable()`。
- * 想表达「某类型或 null」用 `.nullable()`；想表达「就是 null」用 `s.null()`。
- */
 export class NullSchema extends Schema<null> {
   readonly kind = "null" as const;
 
@@ -775,9 +773,23 @@ export class NullSchema extends Schema<null> {
     return null;
   }
 
-  protected _describe(): SchemaDescription {
+  protected _describe(): LeafSchemaDescription {
     return { kind: this.kind };
   }
+}
+
+function buildConstraints(
+  values: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const entries = Object.entries(values).filter(
+    ([, value]) => value !== undefined,
+  );
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(entries);
 }
 
 function assertJSONValue(

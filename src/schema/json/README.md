@@ -196,19 +196,41 @@ s.union([s.string(), s.number()]).nullable(); // string | number | null
 s.string().min(1).min(3); // 最小长度为 3
 ```
 
-### 对象的 `.strict()`
+### 对象属性的缺失与额外属性
 
-本设计采用约定的自定义语义：
+`ObjectSchema` 用两个正交维度控制对象校验：
 
-- 默认模式：声明的属性可以缺失，额外属性允许存在并保留。
-- `strict()` 模式：声明的属性必须全部存在，并且拒绝额外属性。
+- `optionalProps: string[]`：允许缺失的已声明属性名白名单。**默认包含 `shape` 的全部 key**，即默认所有已声明属性都可缺失。未在列表中的已声明属性若在输入中缺失，将报错。
+- `allowUnknownProps: boolean`：是否允许未声明属性。**默认 `true`**，额外属性允许存在并保留；置为 `false` 时拒绝额外属性。
 
-```
+对应方法：
+
+```ts
 s.object({ name: s.string() });
+// 默认：name 可缺失；额外属性允许并保留
+
+s.object({ name: s.string() }).optionalProperties([]);
+// 所有已声明属性必填；额外属性仍允许
+
+s.object({ name: s.string() }).optionalProperties(['name']);
+// name 可缺失；额外属性仍允许
+
+s.object({ name: s.string() }).allowUnknownProperties(false);
+// name 可缺失；额外属性报错
+
 s.object({ name: s.string() }).strict();
+// 等价于 optionalProperties([]).allowUnknownProperties(false)
+// 即所有已声明属性必填，且拒绝额外属性
 ```
 
-注意：这里的 `strict()` 同时影响必需属性和额外属性处理，这是本项目的约定，不应直接等同于 Zod 的标准语义。
+`strict(value: boolean = true)` 是组合快捷方式：
+
+- `strict()` / `strict(true)`：`optionalProperties([])` + `allowUnknownProperties(false)`。
+- `strict(false)`：恢复默认宽松状态，即 `optionalProperties(Object.keys(shape))` + `allowUnknownProperties(true)`。
+
+`optionalProperties(keys)` 会校验每个 key 都是 `shape` 已声明的属性，否则抛 `TypeError`。
+
+注意：这里的语义是本项目的约定，不应直接等同于 Zod 的 `.strict()`。
 
 ## 4. 扩展机制
 
@@ -289,13 +311,42 @@ RPC 签名采用元组结构：
 
 ## 7. 描述与文档生成
 
-每个 Schema 提供 `toJSON()`，返回结构化描述，包含：
+每个 Schema 提供 `toJSON()`，返回结构化描述。`SchemaDescription` 是按 `kind` 区分的联合类型，公共字段为：
 
 - `kind`：类型标识。
 - `description`：人类可读说明。
 - `nullable`：是否接受 `null`。
-- `constraints`：长度、范围、枚举值、严格模式等约束。
-- `children`：对象属性、数组元素、联合类型成员等子 Schema。
+- `constraints`：长度、范围、枚举值、字面量值、对象属性策略等约束。无约束时该字段缺省，不输出空对象。
+
+子 Schema 的字段按具体 `kind` 各自命名，单子节点直接携带子描述、多子节点按集合表达：
+
+| kind | 子描述字段 | 形态 |
+| --- | --- | --- |
+| `object` | `properties` | `Record<string, SchemaDescription>`，按 key 描述每个属性的 schema |
+| `array` | `element` | `SchemaDescription`，数组元素类型 |
+| `record` | `value` | `SchemaDescription`，值类型（多类型用 `s.record(s.union([...]))` 表达） |
+| `union` | `options` | `SchemaDescription[]`，所有允许的成员 schema |
+| `tuple` | `elements` | `SchemaDescription[]`，按固定位置描述 |
+
+叶子类型（`string` / `number` / `boolean` / `literal` / `enum` / `unknown` / `null`）没有子描述字段。
+
+例如：
+
+```ts
+s.array(s.string().min(2)).describe("names")
+// { kind: "array", description: "names",
+//   element: { kind: "string", constraints: { min: 2 } } }
+
+s.object({ id: s.number() }).strict()
+// { kind: "object",
+//   constraints: { optionalProps: [], allowUnknownProps: false },
+//   properties: { id: { kind: "number" } } }
+
+s.record(s.union([s.string(), s.number()]))
+// { kind: "record",
+//   value: { kind: "union",
+//     options: [{ kind: "string" }, { kind: "number" }] } }
+```
 
 `JSONRPC2Repository.describe()` 则进一步输出 RPC 方法的参数来源、注入键、参数 Schema 和返回值 Schema。
 
@@ -318,12 +369,11 @@ greet(name: string, requestId: <injectable>) => string
 
 当前代码是设计实现的初稿，正式使用前建议优先处理以下问题：
 
-1. 修正 `.strict()` 的类型与运行时一致性：当前实现会修改对象实例状态并通过类型断言改变返回类型；更稳妥的实现应返回独立的严格模式实例。
-2. 统一错误路径：数组、对象和 `NullableSchema` 应使用一致的路径组合规则，避免重复路径。
-3. 完善扩展类的约束继承：验证自定义 Schema 继承后，已有约束、描述及链式调用是否都能正确保留。
-4. 明确注入值的验证策略：当前实现只验证客户端参数和返回值，注入值尚未经过独立的 Schema 验证。若注入值需要强类型保证，应为注入标记增加可选的值 Schema，或者提供类型安全的解析器注册机制。
-5. 明确 `void` 的返回值规则：当前实现忽略 handler 的实际返回值并返回 `undefined`。如果希望检测错误地返回了非 `undefined` 的值，需要额外增加运行时检查。
-6. 验证 TypeScript 编译结果：重点检查元组推导、对象严格模式类型、扩展类以及 `InjectableTypes` 的类型合并行为。
-7. 增加回归测试：覆盖正常输入、边界值、非法 JSON 值、嵌套错误路径、注入顺序、重复注册、缺失解析器和返回值验证失败。
+1. 统一错误路径：数组、对象、元组和 `NullableSchema` 应使用一致的路径组合规则，避免重复路径或丢失子路径。
+2. 完善扩展类的约束继承：验证自定义 Schema 继承后，已有约束、描述及链式调用是否都能正确保留。
+3. 明确注入值的验证策略：当前实现只验证客户端参数和返回值，注入值尚未经过独立的 Schema 验证。若注入值需要强类型保证，应为注入标记增加可选的值 Schema，或者提供类型安全的解析器注册机制。
+4. 明确 `void` 的返回值规则：当前实现忽略 handler 的实际返回值并返回 `undefined`。如果希望检测错误地返回了非 `undefined` 的值，需要额外增加运行时检查。
+5. 验证 TypeScript 编译结果：重点检查元组推导、对象配置方法的类型、扩展类以及 `InjectableTypes` 的类型合并行为。
+6. 增加回归测试：覆盖正常输入、边界值、非法 JSON 值、嵌套错误路径、注入顺序、重复注册、缺失解析器和返回值验证失败。
 
 总体上，核心设计已经明确：Schema 负责 JSON 数据的定义与验证，RPC 签名负责方法参数和返回值的组织，注入标记负责连接服务端上下文。 三者职责分离，后续扩展会比较直接。

@@ -5,6 +5,7 @@ import { PERMISSION_DENIED } from '../../src/errors/codes';
 import { s } from '../../src/schema/json';
 
 describe('checkPermission', () => {
+
     const descriptor = buildDescriptor(
         {
             namespace: 'secret',
@@ -33,4 +34,14 @@ describe('checkPermission', () => {
             checkPermission(descriptor, { perm_check: async () => true }),
         ).resolves.toBeUndefined();
     });
+
+    it("describe alone does not emit empty constraints", () => {
+        const described = s.string().describe("only desc");
+        expect(described.toJSON()).toEqual({
+            kind: "string",
+            description: "only desc",
+        });
+        expect(described.toJSON()).not.toHaveProperty("constraints");
+    });
+
 });

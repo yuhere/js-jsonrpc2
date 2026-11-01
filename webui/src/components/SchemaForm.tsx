@@ -185,8 +185,8 @@ function SchemaField({
 
     // ── union：标题 + 分支选择同行 ──
     if (kind === 'union') {
-        const options = Array.isArray(schema.children?.options)
-            ? (schema.children!.options as unknown[]).filter(isSchema)
+        const options = Array.isArray(schema.options)
+            ? schema.options.filter(isSchema)
             : [];
         return (
             <div className="sf-node sf-row" style={{ paddingLeft: depth * 14 }}>
@@ -422,7 +422,7 @@ function UnionField({
 }
 
 // ─────────────────────────────────────────────────────────────
-// 容器子节点
+// 容器子节点（对齐新 SchemaDescription：无 children）
 // ─────────────────────────────────────────────────────────────
 
 function ContainerChildren({
@@ -439,11 +439,10 @@ function ContainerChildren({
     disabled?: boolean;
 }) {
     const t = useT();
-    const c = schema.children ?? {};
 
-    // array
+    // array → element
     if (schema.kind === 'array') {
-        const itemSchema = isSchema(c.items) ? c.items : undefined;
+        const itemSchema = isSchema(schema.element) ? schema.element : undefined;
         if (!itemSchema) return <p className="hint">{t('schema.arrayNoItem')}</p>;
         const arr = Array.isArray(value) ? value : [];
         return (
@@ -485,10 +484,10 @@ function ContainerChildren({
         );
     }
 
-    // tuple
+    // tuple → elements
     if (schema.kind === 'tuple') {
-        const items = Array.isArray(c.items)
-            ? (c.items as unknown[]).filter(isSchema)
+        const items = Array.isArray(schema.elements)
+            ? schema.elements.filter(isSchema)
             : [];
         const arr = Array.isArray(value) ? value : [];
         return (
@@ -513,14 +512,17 @@ function ContainerChildren({
         );
     }
 
-    // object
+    // object → properties；非 strict 提示基于 allowUnknownProps
     if (schema.kind === 'object') {
-        const props = (c.properties ?? {}) as Record<string, unknown>;
+        const props = (schema.properties ?? {}) as Record<string, unknown>;
         const obj =
             value && typeof value === 'object' && !Array.isArray(value)
                 ? (value as Record<string, unknown>)
                 : {};
-        const strict = Boolean(schema.constraints?.strict);
+        // 新约束：allowUnknownProps 默认 true；false 表示拒绝额外属性（strict 的一部分）
+        const allowUnknown =
+            (schema.constraints as { allowUnknownProps?: boolean } | undefined)
+                ?.allowUnknownProps !== false;
         return (
             <div>
                 {Object.entries(props).map(([key, prop]) => {
@@ -543,7 +545,7 @@ function ContainerChildren({
                         />
                     );
                 })}
-                {!strict && (
+                {allowUnknown && (
                     <p
                         className="hint"
                         style={{ paddingLeft: depth * 14, margin: '4px 0' }}
@@ -555,9 +557,9 @@ function ContainerChildren({
         );
     }
 
-    // record
+    // record → value
     if (schema.kind === 'record') {
-        const valueSchema = isSchema(c.values) ? c.values : undefined;
+        const valueSchema = isSchema(schema.value) ? schema.value : undefined;
         if (!valueSchema) return <p className="hint">{t('schema.recordNoValue')}</p>;
         const obj =
             value && typeof value === 'object' && !Array.isArray(value)

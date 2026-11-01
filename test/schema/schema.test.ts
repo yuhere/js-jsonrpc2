@@ -181,14 +181,28 @@ describe("ArraySchema", () => {
         expect(() => s.array(s.string()).max(1.2)).toThrow(TypeError);
     });
 
-    it("describes its item schema", () => {
+    it("describes its element schema", () => {
         expect(s.array(s.string()).toJSON()).toMatchObject({
             kind: "array",
-            children: {
-                items: { kind: "string" },
-            },
+            element: { kind: "string" },
         });
     });
+
+    it("omits empty constraints", () => {
+        expect(s.array(s.string()).toJSON()).not.toHaveProperty("constraints");
+    });
+
+    it("preserves nested error paths from item schemas", () => {
+        const schema = s.array(s.object({ id: s.number() }).strict());
+        try {
+            schema.parse([{ id: "x" }]);
+            expect.fail("should throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SchemaValidationError);
+            expect((e as SchemaValidationError).path).toEqual(["0", "id"]);
+        }
+    });
+
 });
 
 describe("ObjectSchema", () => {
@@ -262,6 +276,65 @@ describe("ObjectSchema", () => {
         })).toThrow();
     });
 
+    it("optionalProperties whitelists missing keys", () => {
+        const partial = s.object({
+            name: s.string(),
+            age: s.number(),
+        }).optionalProperties(["age"]);
+
+        // age 可缺失
+        expect(partial.parse({ name: "Alice" })).toEqual({ name: "Alice" });
+        // name 不在白名单 → 必填
+        expect(() => partial.parse({ age: 20 })).toThrow();
+        // 全部存在
+        expect(partial.parse({ name: "Alice", age: 20 })).toEqual({
+            name: "Alice",
+            age: 20,
+        });
+    });
+
+    it("optionalProperties([]) requires all declared properties", () => {
+        const required = s.object({ name: s.string() }).optionalProperties([]);
+
+        expect(required.parse({ name: "Alice" })).toEqual({ name: "Alice" });
+        expect(() => required.parse({})).toThrow();
+    });
+
+    it("optionalProperties rejects unknown property names", () => {
+        expect(() =>
+            s.object({ name: s.string() }).optionalProperties(["nope"]),
+        ).toThrow(TypeError);
+    });
+
+    it("allowUnknownProperties(false) rejects extra properties", () => {
+        const closed = s.object({ name: s.string() }).allowUnknownProperties(false);
+
+        expect(closed.parse({ name: "Alice" })).toEqual({ name: "Alice" });
+        expect(() => closed.parse({ name: "Alice", extra: true })).toThrow();
+    });
+
+    it("allowUnknownProperties(true) keeps extra properties", () => {
+        const open = s.object({ name: s.string() }).allowUnknownProperties(true);
+
+        expect(open.parse({ name: "Alice", extra: 1 })).toEqual({
+            name: "Alice",
+            extra: 1,
+        });
+    });
+
+    it("strict(false) restores the default permissive behavior", () => {
+        const schema = s.object({ name: s.string(), age: s.number() });
+        const reopened = schema.strict().strict(false);
+
+        // 缺失 age 仍被允许
+        expect(reopened.parse({ name: "Alice" })).toEqual({ name: "Alice" });
+        // 额外属性仍被保留
+        expect(reopened.parse({ name: "Alice", extra: 1 })).toEqual({
+            name: "Alice",
+            extra: 1,
+        });
+    });
+
     it("supports nested objects and arrays", () => {
         const nested = s.object({
             user: s.object({
@@ -286,14 +359,56 @@ describe("ObjectSchema", () => {
             s.object({ name: s.string() }).strict().toJSON(),
         ).toMatchObject({
             kind: "object",
-            constraints: { strict: true },
-            children: {
-                properties: {
-                    name: { kind: "string" },
-                },
+            constraints: {
+                optionalProps: [],
+                allowUnknownProps: false,
+            },
+            properties: {
+                name: { kind: "string" },
             },
         });
     });
+
+    it("describes default optionalProps as all declared keys", () => {
+        expect(
+            s.object({ name: s.string(), age: s.number() }).toJSON(),
+        ).toMatchObject({
+            kind: "object",
+            constraints: {
+                optionalProps: ["name", "age"],
+                allowUnknownProps: true,
+            },
+            properties: {
+                name: { kind: "string" },
+                age: { kind: "number" },
+            },
+        });
+    });
+
+    it("does not treat Object.prototype keys as declared properties", () => {
+        const closed = s
+            .object({ name: s.string() })
+            .allowUnknownProperties(false);
+
+        // toString / constructor 不在 shape 上 → 视为未知属性
+        expect(() => closed.parse({ toString: "x" })).toThrow(
+            SchemaValidationError,
+        );
+        expect(() => closed.parse({ constructor: 1 })).toThrow(
+            SchemaValidationError,
+        );
+
+        const open = s.object({ name: s.string() });
+        expect(open.parse({ toString: "x" })).toEqual({ toString: "x" });
+        expect(open.parse({ constructor: 1 })).toEqual({ constructor: 1 });
+    });
+
+    it("optionalProperties does not accept prototype property names unless in shape", () => {
+        expect(() =>
+            s.object({ name: s.string() }).optionalProperties(["toString"]),
+        ).toThrow(TypeError);
+    });
+
 });
 
 describe("RecordSchema", () => {
@@ -334,8 +449,18 @@ describe("RecordSchema", () => {
     it("describes its value schema", () => {
         expect(s.record(s.number()).toJSON()).toMatchObject({
             kind: "record",
-            children: {
-                values: { kind: "number" },
+            value: { kind: "number" },
+        });
+    });
+
+    it("supports union value schemas", () => {
+        expect(
+            s.record(s.union([s.string(), s.number()])).toJSON(),
+        ).toMatchObject({
+            kind: "record",
+            value: {
+                kind: "union",
+                options: [{ kind: "string" }, { kind: "number" }],
             },
         });
     });
@@ -370,9 +495,7 @@ describe("UnionSchema", () => {
     it("describes all union options", () => {
         expect(s.union([s.string(), s.number()]).toJSON()).toMatchObject({
             kind: "union",
-            children: {
-                options: [{ kind: "string" }, { kind: "number" }],
-            },
+            options: [{ kind: "string" }, { kind: "number" }],
         });
     });
 });
@@ -387,9 +510,10 @@ describe("UnionSchema member nullability stripping", () => {
 
     it("member nullable in toJSON is removed", () => {
         const desc = s.union([s.string().nullable(), s.number()]).toJSON();
-        const options = (desc.children as { options: any[] }).options;
-        expect(options[0].nullable).toBeUndefined();
-        expect(options[1].nullable).toBeUndefined();
+        expect(desc.kind).toBe("union");
+        if (desc.kind !== "union") throw new Error("expected union description");
+        expect(desc.options[0]!.nullable).toBeUndefined();
+        expect(desc.options[1]!.nullable).toBeUndefined();
     });
 
     it("union-level .nullable() still allows null", () => {
@@ -417,6 +541,38 @@ describe("TupleSchema", () => {
         expect(() => schema.parse(["hello", 42])).toThrow(SchemaValidationError);   // 长度不一致
         expect(() => schema.parse(["hello", "42", true])).toThrow(SchemaValidationError);   // 第二项类型不匹配
         expect(() => schema.parse("hello")).toThrow(SchemaValidationError);   // 不是数组
+    });
+
+    it("describes positional element schemas", () => {
+        expect(s.tuple([s.string(), s.number()]).toJSON()).toMatchObject({
+            kind: "tuple",
+            elements: [{ kind: "string" }, { kind: "number" }],
+        });
+    });
+
+    it("preserves nested error paths from element schemas", () => {
+        const schema = s.tuple([
+            s.string(),
+            s.object({ id: s.number() }).strict(),
+        ]);
+        try {
+            schema.parse(["ok", { id: "x" }]);
+            expect.fail("should throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SchemaValidationError);
+            expect((e as SchemaValidationError).path).toEqual(["1", "id"]);
+        }
+    });
+
+    it("preserves path for first-element failures", () => {
+        const schema = s.tuple([s.string().min(3), s.number()]);
+        try {
+            schema.parse(["ab", 1]);
+            expect.fail("should throw");
+        } catch (e) {
+            expect(e).toBeInstanceOf(SchemaValidationError);
+            expect((e as SchemaValidationError).path).toEqual(["0"]);
+        }
     });
 });
 
@@ -649,12 +805,35 @@ describe("NullSchema", () => {
     });
 
     it("describes itself as kind 'null' and has no nullable flag", () => {
-        expect(s.null().toJSON()).toEqual({ kind: "null" });
+        expect(s.null().toJSON()).toEqual({ kind: "null", description: "" });
     });
 
     it("does not expose .nullable()", () => {
         // @ts-expect-error — NullSchema 不继承 NullableSchema
         const _ = s.null().nullable;
         void _;
+    });
+});
+
+
+describe("empty constraints omission", () => {
+    it("omits empty constraints on leaf schemas", () => {
+        expect(s.string().toJSON()).not.toHaveProperty("constraints");
+        expect(s.number().toJSON()).not.toHaveProperty("constraints");
+        expect(s.boolean().toJSON()).not.toHaveProperty("constraints");
+        expect(s.record(s.string()).toJSON()).not.toHaveProperty(
+            "constraints",
+        );
+    });
+
+    it("describe without min/max still omits constraints", () => {
+        expect(s.string().describe("x").toJSON()).toEqual({
+            kind: "string",
+            description: "x",
+        });
+        expect(s.number().describe("n").toJSON()).toEqual({
+            kind: "number",
+            description: "n",
+        });
     });
 });

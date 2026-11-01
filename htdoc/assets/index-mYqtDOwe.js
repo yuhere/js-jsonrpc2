@@ -9219,7 +9219,7 @@ function formatConstraints$1(constraints) {
 function SchemaNode({ schema, depth, defaultOpen, label }) {
 	const t = useT();
 	const [open, setOpen] = (0, import_react.useState)(defaultOpen);
-	const hasChildren = schema.children && Object.keys(schema.children).length > 0;
+	const hasChildren = hasChildNodes(schema);
 	const constraintsText = formatConstraints$1(schema.constraints);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "schema-node",
@@ -9269,55 +9269,102 @@ function SchemaNode({ schema, depth, defaultOpen, label }) {
 		})]
 	});
 }
-function renderChildren(schema, depth, t) {
-	const c = schema.children ?? {};
-	const out = [];
-	if (c.inner && isSchemaDescription(c.inner)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
-		schema: c.inner,
-		depth,
-		defaultOpen: true,
-		label: t("schema.inner")
-	}, "inner"));
-	if (Array.isArray(c.items)) c.items.forEach((item, i) => {
-		if (isSchemaDescription(item)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
-			schema: item,
-			depth,
-			defaultOpen: true,
-			label: String(i)
-		}, `item-${i}`));
-	});
-	else if (c.items && isSchemaDescription(c.items)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
-		schema: c.items,
-		depth,
-		defaultOpen: true,
-		label: t("schema.items")
-	}, "items"));
-	if (Array.isArray(c.options)) c.options.forEach((opt, i) => {
-		if (isSchemaDescription(opt)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
-			schema: opt,
-			depth,
-			defaultOpen: false,
-			label: t("schema.optionIndex", { index: i })
-		}, `opt-${i}`));
-	});
-	if (c.properties && typeof c.properties === "object" && !Array.isArray(c.properties)) {
-		for (const [key, prop] of Object.entries(c.properties)) if (isSchemaDescription(prop)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
-			schema: prop,
-			depth,
-			defaultOpen: true,
-			label: key
-		}, `prop-${key}`));
-	}
-	if (c.values && isSchemaDescription(c.values)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
-		schema: c.values,
-		depth,
-		defaultOpen: true,
-		label: t("schema.values")
-	}, "values"));
-	return out;
-}
 function isSchemaDescription(v) {
 	return !!v && typeof v === "object" && typeof v.kind === "string";
+}
+/** 是否存在可展开的子节点（新结构 + stream 的兼容路径） */
+function hasChildNodes(schema) {
+	switch (schema.kind) {
+		case "array": return isSchemaDescription(schema.element);
+		case "record": return isSchemaDescription(schema.value);
+		case "tuple": {
+			const els = schema.elements;
+			return Array.isArray(els) && els.some(isSchemaDescription);
+		}
+		case "union": {
+			const opts = schema.options;
+			return Array.isArray(opts) && opts.some(isSchemaDescription);
+		}
+		case "object": {
+			const props = schema.properties;
+			return !!props && typeof props === "object" && !Array.isArray(props) && Object.keys(props).length > 0;
+		}
+		case "stream": {
+			const any = schema;
+			return isSchemaDescription(any.inner) || isSchemaDescription(any.children?.inner);
+		}
+		default: return false;
+	}
+}
+function renderChildren(schema, depth, t) {
+	const out = [];
+	switch (schema.kind) {
+		case "array": {
+			const element = schema.element;
+			if (isSchemaDescription(element)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
+				schema: element,
+				depth,
+				defaultOpen: true
+			}, "element"));
+			break;
+		}
+		case "record": {
+			const value = schema.value;
+			if (isSchemaDescription(value)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
+				schema: value,
+				depth,
+				defaultOpen: true
+			}, "value"));
+			break;
+		}
+		case "tuple": {
+			const elements = schema.elements;
+			if (Array.isArray(elements)) elements.forEach((item, i) => {
+				if (isSchemaDescription(item)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
+					schema: item,
+					depth,
+					defaultOpen: true,
+					label: String(i)
+				}, `el-${i}`));
+			});
+			break;
+		}
+		case "union": {
+			const options = schema.options;
+			if (Array.isArray(options)) options.forEach((opt, i) => {
+				if (isSchemaDescription(opt)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
+					schema: opt,
+					depth,
+					defaultOpen: false,
+					label: t("schema.optionIndex", { index: i })
+				}, `opt-${i}`));
+			});
+			break;
+		}
+		case "object": {
+			const props = schema.properties;
+			if (props && typeof props === "object" && !Array.isArray(props)) {
+				for (const [key, prop] of Object.entries(props)) if (isSchemaDescription(prop)) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
+					schema: prop,
+					depth,
+					defaultOpen: true,
+					label: key
+				}, `prop-${key}`));
+			}
+			break;
+		}
+		case "stream": {
+			const any = schema;
+			const inner = isSchemaDescription(any.inner) ? any.inner : isSchemaDescription(any.children?.inner) ? any.children.inner : void 0;
+			if (inner) out.push(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
+				schema: inner,
+				depth,
+				defaultOpen: true
+			}, "inner"));
+			break;
+		}
+	}
+	return out;
 }
 function SchemaView({ schema, defaultOpen = true, depth = 0 }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaNode, {
@@ -9387,12 +9434,11 @@ function isSchema$1(v) {
 * - 原始类型返回零值（''、0、false）
 * - literal 返回固定值
 * - enum 返回第一个枚举值
-* - 容器类型递归展开
+* - 容器类型递归展开（按新字段：element / value / properties / options / elements）
 * - unknown 返回 null
 */
 function sampleFromSchema(schema) {
 	if (schema.nullable) return null;
-	const c = schema.children ?? {};
 	switch (schema.kind) {
 		case "string": return "";
 		case "number": return 0;
@@ -9403,19 +9449,19 @@ function sampleFromSchema(schema) {
 			const values = schema.constraints?.values;
 			return Array.isArray(values) && values.length > 0 ? values[0] : "";
 		}
-		case "array": return [isSchema$1(c.items) ? sampleFromSchema(c.items) : null];
-		case "tuple": return (Array.isArray(c.items) ? c.items : []).map((it) => isSchema$1(it) ? sampleFromSchema(it) : null);
+		case "array": return [isSchema$1(schema.element) ? sampleFromSchema(schema.element) : null];
+		case "tuple": return (Array.isArray(schema.elements) ? schema.elements : []).map((it) => isSchema$1(it) ? sampleFromSchema(it) : null);
 		case "union": {
-			const options = Array.isArray(c.options) ? c.options : [];
+			const options = Array.isArray(schema.options) ? schema.options : [];
 			return options.length > 0 && isSchema$1(options[0]) ? sampleFromSchema(options[0]) : null;
 		}
 		case "object": {
-			const props = c.properties ?? {};
+			const props = schema.properties ?? {};
 			const out = {};
 			for (const [k, v] of Object.entries(props)) if (isSchema$1(v)) out[k] = sampleFromSchema(v);
 			return out;
 		}
-		case "record": return { key: isSchema$1(c.values) ? sampleFromSchema(c.values) : null };
+		case "record": return { key: isSchema$1(schema.value) ? sampleFromSchema(schema.value) : null };
 		default: return null;
 	}
 }
@@ -9558,7 +9604,7 @@ function SchemaField({ schema, value, onChange, label, depth = 0, defaultOpen = 
 		})]
 	});
 	if (kind === "union") {
-		const options = Array.isArray(schema.children?.options) ? schema.children.options.filter(isSchema$1) : [];
+		const options = Array.isArray(schema.options) ? schema.options.filter(isSchema$1) : [];
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "sf-node sf-row",
 			style: { paddingLeft: depth * 14 },
@@ -9744,9 +9790,8 @@ function UnionField({ options, value, onChange, depth, disabled }) {
 }
 function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 	const t = useT();
-	const c = schema.children ?? {};
 	if (schema.kind === "array") {
-		const itemSchema = isSchema$1(c.items) ? c.items : void 0;
+		const itemSchema = isSchema$1(schema.element) ? schema.element : void 0;
 		if (!itemSchema) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "hint",
 			children: t("schema.arrayNoItem")
@@ -9782,7 +9827,7 @@ function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 		})] });
 	}
 	if (schema.kind === "tuple") {
-		const items = Array.isArray(c.items) ? c.items.filter(isSchema$1) : [];
+		const items = Array.isArray(schema.elements) ? schema.elements.filter(isSchema$1) : [];
 		const arr = Array.isArray(value) ? value : [];
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: items.map((itemSchema, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaField, {
 			schema: itemSchema,
@@ -9799,9 +9844,9 @@ function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 		}, i)) });
 	}
 	if (schema.kind === "object") {
-		const props = c.properties ?? {};
+		const props = schema.properties ?? {};
 		const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-		const strict = Boolean(schema.constraints?.strict);
+		const allowUnknown = schema.constraints?.allowUnknownProps !== false;
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [Object.entries(props).map(([key, prop]) => {
 			if (!isSchema$1(prop)) return null;
 			return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaField, {
@@ -9818,7 +9863,7 @@ function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 				disabled,
 				defaultOpen: false
 			}, key);
-		}), !strict && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		}), allowUnknown && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "hint",
 			style: {
 				paddingLeft: depth * 14,
@@ -9828,7 +9873,7 @@ function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 		})] });
 	}
 	if (schema.kind === "record") {
-		const valueSchema = isSchema$1(c.values) ? c.values : void 0;
+		const valueSchema = isSchema$1(schema.value) ? schema.value : void 0;
 		if (!valueSchema) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "hint",
 			children: t("schema.recordNoValue")
@@ -10640,7 +10685,7 @@ function Footer() {
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 			className: "footer-version",
 			title: t("footer.version"),
-			children: ["v", "2.1.13"]
+			children: ["v", "2.1.14"]
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "footer-links",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
@@ -10746,6 +10791,13 @@ async function collectApiDoc(rpc, methods, onProgress) {
 		methods: out
 	};
 }
+/**
+* 树状渲染 schema。
+* - array / record / stream：直接展开子节点，不挂 element / value / inner 标签
+* - object：属性名作标签
+* - union：option[i]
+* - tuple：[i]
+*/
 function renderSchemaTree(schema, indent = 0) {
 	const pad = "  ".repeat(indent);
 	const lines = [];
@@ -10758,26 +10810,57 @@ function renderSchemaTree(schema, indent = 0) {
 		if (parts.length) head += ` \`{ ${parts.join(", ")} }\``;
 	}
 	lines.push(head);
-	const ch = schema.children ?? {};
-	const pushChild = (label, child) => {
+	/** 带标签的子节点（object 属性 / union 分支 / tuple 位） */
+	const pushLabeled = (label, child) => {
 		const sub = renderSchemaTree(child, indent + 1);
 		if (sub.length) {
 			sub[0] = `${"  ".repeat(indent + 1)}- **${label}**: ${sub[0].trim().replace(/^- /, "")}`;
 			lines.push(...sub);
 		}
 	};
-	if (isSchema(ch.inner)) pushChild("inner", ch.inner);
-	if (Array.isArray(ch.items)) ch.items.forEach((it, i) => {
-		if (isSchema(it)) pushChild(`[${i}]`, it);
-	});
-	else if (isSchema(ch.items)) pushChild("items", ch.items);
-	if (Array.isArray(ch.options)) ch.options.forEach((opt, i) => {
-		if (isSchema(opt)) pushChild(`option[${i}]`, opt);
-	});
-	if (ch.properties && typeof ch.properties === "object") {
-		for (const [k, v] of Object.entries(ch.properties)) if (isSchema(v)) pushChild(k, v);
+	/** 无标签，直接展开（array element / record value / stream inner） */
+	const pushPlain = (child) => {
+		lines.push(...renderSchemaTree(child, indent + 1));
+	};
+	switch (schema.kind) {
+		case "array": {
+			const element = schema.element;
+			if (isSchema(element)) pushPlain(element);
+			break;
+		}
+		case "record": {
+			const value = schema.value;
+			if (isSchema(value)) pushPlain(value);
+			break;
+		}
+		case "tuple": {
+			const elements = schema.elements;
+			if (Array.isArray(elements)) elements.forEach((it, i) => {
+				if (isSchema(it)) pushLabeled(`[${i}]`, it);
+			});
+			break;
+		}
+		case "union": {
+			const options = schema.options;
+			if (Array.isArray(options)) options.forEach((opt, i) => {
+				if (isSchema(opt)) pushLabeled(`option[${i}]`, opt);
+			});
+			break;
+		}
+		case "object": {
+			const props = schema.properties;
+			if (props && typeof props === "object" && !Array.isArray(props)) {
+				for (const [k, v] of Object.entries(props)) if (isSchema(v)) pushLabeled(k, v);
+			}
+			break;
+		}
+		case "stream": {
+			const any = schema;
+			const inner = isSchema(any.inner) ? any.inner : isSchema(any.children?.inner) ? any.children.inner : void 0;
+			if (inner) pushPlain(inner);
+			break;
+		}
 	}
-	if (isSchema(ch.values)) pushChild("values", ch.values);
 	return lines;
 }
 function renderMarkdown(doc) {
@@ -10814,7 +10897,7 @@ function renderMarkdown(doc) {
 		const [ret, ...params] = m.signature;
 		lines.push("**返回类型**");
 		lines.push("");
-		lines.push(...renderSchemaTree(ret, 0));
+		if (ret) lines.push(...renderSchemaTree(ret, 0));
 		lines.push("");
 		lines.push(`**参数**（${params.length} 个）`);
 		lines.push("");
@@ -10832,7 +10915,6 @@ function renderMarkdown(doc) {
 	}
 	return lines.join("\n");
 }
-/** 触发浏览器下载 */
 function downloadText(filename, text, mime = "text/plain") {
 	const blob = new Blob([text], { type: `${mime};charset=utf-8` });
 	const url = URL.createObjectURL(blob);
@@ -11019,4 +11101,4 @@ function App() {
 import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(I18nProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }) }));
 //#endregion
 
-//# sourceMappingURL=index-CqI7vRAS.js.map
+//# sourceMappingURL=index-mYqtDOwe.js.map

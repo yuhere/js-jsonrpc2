@@ -28,7 +28,7 @@ describe("immutable schema modifiers", () => {
     const described = base.describe("Name");
 
     expect(described).not.toBe(base);
-    expect(base.toJSON().description).toBeUndefined();
+    expect(base.toJSON().description).toBe("");
     expect(described.toJSON()).toMatchObject({
       kind: "string",
       description: "Name",
@@ -47,8 +47,67 @@ describe("immutable schema modifiers", () => {
       SchemaValidationError,
     );
     expect(strict.toJSON().description).toBe("User");
-    expect(base.toJSON().constraints?.strict).toBe(false);
-    expect(strict.toJSON().constraints?.strict).toBe(true);
+
+    // 默认宽松：所有已声明属性可缺失，允许未声明属性。
+    expect(base.toJSON().constraints).toEqual({
+      optionalProps: ["name"],
+      allowUnknownProps: true,
+    });
+
+    // strict 收紧：无可缺失属性，拒绝未声明属性。
+    expect(strict.toJSON().constraints).toEqual({
+      optionalProps: [],
+      allowUnknownProps: false,
+    });
+  });
+
+  it("strict(false) restores the default permissive configuration", () => {
+    const base = s.object({ name: s.string() }).strict();
+    const relaxed = base.strict(false);
+
+    expect(relaxed).not.toBe(base);
+    expect(relaxed.toJSON().constraints).toEqual({
+      optionalProps: ["name"],
+      allowUnknownProps: true,
+    });
+    expect(relaxed.parse({})).toEqual({});
+    expect(relaxed.parse({ extra: true })).toEqual({ extra: true });
+  });
+
+  it("optionalProperties narrows the missing-allowed set", () => {
+    const base = s.object({ a: s.string(), b: s.number() });
+    const partial = base.optionalProperties(["a"]);
+
+    expect(partial).not.toBe(base);
+    expect(partial.toJSON().constraints).toEqual({
+      optionalProps: ["a"],
+      allowUnknownProps: true,
+    });
+    expect(partial.parse({ a: "x", b: 1 })).toEqual({ a: "x", b: 1 });
+    expect(partial.parse({ b: 1 })).toEqual({ b: 1 });
+    expect(() => partial.parse({ a: "x" })).toThrow(SchemaValidationError);
+    expect(() => partial.parse({})).toThrow(SchemaValidationError);
+  });
+
+  it("optionalProperties rejects unknown property names", () => {
+    const base = s.object({ name: s.string() });
+
+    expect(() => base.optionalProperties(["nope"])).toThrow(TypeError);
+  });
+
+  it("allowUnknownProperties(false) rejects extra properties", () => {
+    const base = s.object({ name: s.string() });
+    const closed = base.allowUnknownProperties(false);
+
+    expect(closed).not.toBe(base);
+    expect(closed.toJSON().constraints).toEqual({
+      optionalProps: ["name"],
+      allowUnknownProps: false,
+    });
+    expect(closed.parse({})).toEqual({});
+    expect(() => closed.parse({ name: "Ada", extra: true })).toThrow(
+      SchemaValidationError,
+    );
   });
 
   it("keeps custom subclass prototypes and state when cloning", () => {
@@ -118,7 +177,7 @@ describe("immutable schema modifiers", () => {
 
 });
 
-// Compile-time sanity check: strict() narrows the inferred object shape.
-const strictTypeCheck: ObjectSchema<{ name: StringSchema }, true> =
+// Compile-time sanity check: strict() returns ObjectSchema<S> (no extra Strict type parameter).
+const strictTypeCheck: ObjectSchema<{ name: StringSchema }> =
   s.object({ name: s.string() }).strict();
 void strictTypeCheck;

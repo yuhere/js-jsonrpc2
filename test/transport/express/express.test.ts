@@ -117,7 +117,7 @@ describe('express integration', () => {
         const [ret] = res.body.result;
         expect(ret.kind).toBe('union');
         expect(ret.nullable).toBe(true);
-        const options = ret.children.options;
+        const options = ret.options;
         expect(options.every((o: any) => o.nullable === undefined)).toBe(true);
     });
 

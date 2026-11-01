@@ -25,7 +25,7 @@ export async function collectApiDoc(
 ): Promise<ApiDoc> {
     const out: MethodDoc[] = [];
     for (let i = 0; i < methods.length; i++) {
-        const name = methods[i];
+        const name = methods[i]!;
         try {
             const [help, sig] = await Promise.all([
                 rpc.call<string>('system.methodHelp', name).catch(() => ''),
@@ -67,6 +67,13 @@ function renderSchema(schema: SchemaDescription): string {
     return s;
 }
 
+/**
+ * 树状渲染 schema。
+ * - array / record / stream：直接展开子节点，不挂 element / value / inner 标签
+ * - object：属性名作标签
+ * - union：option[i]
+ * - tuple：[i]
+ */
 function renderSchemaTree(schema: SchemaDescription, indent = 0): string[] {
     const pad = '  '.repeat(indent);
     const lines: string[] = [];
@@ -82,34 +89,72 @@ function renderSchemaTree(schema: SchemaDescription, indent = 0): string[] {
     }
     lines.push(head);
 
-    const ch = schema.children ?? {};
-    const pushChild = (label: string, child: SchemaDescription) => {
+    /** 带标签的子节点（object 属性 / union 分支 / tuple 位） */
+    const pushLabeled = (label: string, child: SchemaDescription) => {
         const sub = renderSchemaTree(child, indent + 1);
         if (sub.length) {
-            sub[0] = `${'  '.repeat(indent + 1)}- **${label}**: ${sub[0].trim().replace(/^- /, '')}`;
+            sub[0] = `${'  '.repeat(indent + 1)}- **${label}**: ${sub[0]!.trim().replace(/^- /, '')}`;
             lines.push(...sub);
         }
     };
 
-    if (isSchema(ch.inner)) pushChild('inner', ch.inner);
-    if (Array.isArray(ch.items)) {
-        (ch.items as unknown[]).forEach((it, i) => {
-            if (isSchema(it)) pushChild(`[${i}]`, it);
-        });
-    } else if (isSchema(ch.items)) {
-        pushChild('items', ch.items);
-    }
-    if (Array.isArray(ch.options)) {
-        (ch.options as unknown[]).forEach((opt, i) => {
-            if (isSchema(opt)) pushChild(`option[${i}]`, opt);
-        });
-    }
-    if (ch.properties && typeof ch.properties === 'object') {
-        for (const [k, v] of Object.entries(ch.properties)) {
-            if (isSchema(v)) pushChild(k, v);
+    /** 无标签，直接展开（array element / record value / stream inner） */
+    const pushPlain = (child: SchemaDescription) => {
+        lines.push(...renderSchemaTree(child, indent + 1));
+    };
+
+    switch (schema.kind) {
+        case 'array': {
+            const element = (schema as { element?: unknown }).element;
+            if (isSchema(element)) pushPlain(element);
+            break;
         }
+        case 'record': {
+            const value = (schema as { value?: unknown }).value;
+            if (isSchema(value)) pushPlain(value);
+            break;
+        }
+        case 'tuple': {
+            const elements = (schema as { elements?: unknown }).elements;
+            if (Array.isArray(elements)) {
+                elements.forEach((it, i) => {
+                    if (isSchema(it)) pushLabeled(`[${i}]`, it);
+                });
+            }
+            break;
+        }
+        case 'union': {
+            const options = (schema as { options?: unknown }).options;
+            if (Array.isArray(options)) {
+                options.forEach((opt, i) => {
+                    if (isSchema(opt)) pushLabeled(`option[${i}]`, opt);
+                });
+            }
+            break;
+        }
+        case 'object': {
+            const props = (schema as { properties?: unknown }).properties;
+            if (props && typeof props === 'object' && !Array.isArray(props)) {
+                for (const [k, v] of Object.entries(props)) {
+                    if (isSchema(v)) pushLabeled(k, v);
+                }
+            }
+            break;
+        }
+        case 'stream': {
+            // 兼容 signatureOf 的 children.inner 与可能的顶层 inner
+            const any = schema as { inner?: unknown; children?: { inner?: unknown } };
+            const inner = isSchema(any.inner)
+                ? any.inner
+                : isSchema(any.children?.inner)
+                    ? any.children!.inner
+                    : undefined;
+            if (inner) pushPlain(inner);
+            break;
+        }
+        default:
+            break;
     }
-    if (isSchema(ch.values)) pushChild('values', ch.values);
 
     return lines;
 }
@@ -151,7 +196,7 @@ export function renderMarkdown(doc: ApiDoc): string {
         const [ret, ...params] = m.signature;
         lines.push('**返回类型**');
         lines.push('');
-        lines.push(...renderSchemaTree(ret, 0));
+        if (ret) lines.push(...renderSchemaTree(ret, 0));
         lines.push('');
         lines.push(`**参数**（${params.length} 个）`);
         lines.push('');
@@ -161,7 +206,7 @@ export function renderMarkdown(doc: ApiDoc): string {
             params.forEach((p, i) => {
                 const sub = renderSchemaTree(p, 0);
                 if (sub.length) {
-                    sub[0] = `- **参数 [${i}]**: ${sub[0].trim().replace(/^- /, '')}`;
+                    sub[0] = `- **参数 [${i}]**: ${sub[0]!.trim().replace(/^- /, '')}`;
                     lines.push(...sub);
                 }
             });
@@ -174,7 +219,6 @@ export function renderMarkdown(doc: ApiDoc): string {
     return lines.join('\n');
 }
 
-/** 触发浏览器下载 */
 export function downloadText(filename: string, text: string, mime = 'text/plain') {
     const blob = new Blob([text], { type: `${mime};charset=utf-8` });
     const url = URL.createObjectURL(blob);
@@ -186,3 +230,5 @@ export function downloadText(filename: string, text: string, mime = 'text/plain'
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+void renderSchema;

@@ -42,89 +42,95 @@ function convert(desc: SchemaDescription): JSONSchema {
 
     switch (desc.kind) {
         case 'string': {
-        out.type = 'string';
-        const c = (desc.constraints ?? {}) as { min?: number; max?: number };
-        if (c.min !== undefined) out.minLength = c.min;
-        if (c.max !== undefined) out.maxLength = c.max;
+            out.type = 'string';
+            const c = (desc.constraints ?? {}) as { min?: number; max?: number };
+            if (c.min !== undefined) out.minLength = c.min;
+            if (c.max !== undefined) out.maxLength = c.max;
             break;
         }
         case 'number': {
-        out.type = 'number';
-        const c = (desc.constraints ?? {}) as { min?: number; max?: number };
-        if (c.min !== undefined) out.minimum = c.min;
-        if (c.max !== undefined) out.maximum = c.max;
+            out.type = 'number';
+            const c = (desc.constraints ?? {}) as { min?: number; max?: number };
+            if (c.min !== undefined) out.minimum = c.min;
+            if (c.max !== undefined) out.maximum = c.max;
             break;
         }
         case 'boolean':
-        out.type = 'boolean';
+            out.type = 'boolean';
             break;
         case 'literal': {
-        const value = (desc.constraints as { value: unknown }).value;
-        out.const = value;
-        out.type = typeof value; // string | number | boolean
+            const value = (desc.constraints as { value: unknown }).value;
+            out.const = value;
+            out.type = typeof value; // string | number | boolean
             break;
         }
         case 'enum': {
-        out.type = 'string';
-        out.enum = (desc.constraints as { values: unknown[] }).values;
+            out.type = 'string';
+            out.enum = (desc.constraints as { values: unknown[] }).values;
             break;
         }
         case 'array': {
-        out.type = 'array';
-        const c = (desc.constraints ?? {}) as { min?: number; max?: number };
-        if (c.min !== undefined) out.minItems = c.min;
-        if (c.max !== undefined) out.maxItems = c.max;
-            out.items = convert((desc.children as { items: SchemaDescription }).items);
+            out.type = 'array';
+            const c = (desc.constraints ?? {}) as { min?: number; max?: number };
+            if (c.min !== undefined) out.minItems = c.min;
+            if (c.max !== undefined) out.maxItems = c.max;
+            out.items = convert(desc.element);
             break;
         }
         case 'tuple': {
-        out.type = 'array';
-            const items = (desc.children as { items: SchemaDescription[] }).items;
-        out.items = items.map(convert);
-        out.minItems = items.length;
-        out.maxItems = items.length;
+            out.type = 'array';
+            const items = desc.elements;
+            out.items = items.map(convert);
+            out.minItems = items.length;
+            out.maxItems = items.length;
             break;
         }
         case 'object': {
-        out.type = 'object';
-            const strict = Boolean((desc.constraints as { strict?: boolean }).strict);
-            const props = (desc.children as { properties: Record<string, SchemaDescription> })
-                .properties;
-        out.properties = {};
+            out.type = 'object';
+            const optional = new Set(
+                ((desc.constraints as { optionalProps?: string[] } | undefined)
+                    ?.optionalProps) ?? [],
+            );
+            const allowUnknown =
+                ((desc.constraints as { allowUnknownProps?: boolean } | undefined)
+                    ?.allowUnknownProps) ?? true;
+
+            const props = desc.properties;
+            out.properties = {};
             for (const [k, v] of Object.entries(props)) out.properties[k] = convert(v);
-        if (strict) {
-                out.required = Object.keys(props);
-            out.additionalProperties = false;
-        } else {
-            out.additionalProperties = true;
-        }
+
+            const required = Object.keys(props).filter((k) => !optional.has(k));
+            if (required.length > 0) out.required = required;
+
+            if (!allowUnknown) out.additionalProperties = false;
             break;
         }
         case 'record': {
-        out.type = 'object';
-        const c = (desc.constraints ?? {}) as { min?: number; max?: number };
-        if (c.min !== undefined) out.minProperties = c.min;
-        if (c.max !== undefined) out.maxProperties = c.max;
-            out.additionalProperties = convert(
-                (desc.children as { values: SchemaDescription }).values,
-            );
+            out.type = 'object';
+            const c = (desc.constraints ?? {}) as { min?: number; max?: number };
+            if (c.min !== undefined) out.minProperties = c.min;
+            if (c.max !== undefined) out.maxProperties = c.max;
+            out.additionalProperties = convert(desc.value);
             break;
         }
         case 'union': {
-            const options = (desc.children as { options: SchemaDescription[] }).options;
-        out.anyOf = options.map(convert);
+            out.anyOf = desc.options.map(convert);
             break;
         }
         case 'unknown': {
-        out.type = ['object', 'array', 'string', 'number', 'boolean', 'null'];
+            out.type = ['object', 'array', 'string', 'number', 'boolean', 'null'];
             break;
         }
         case 'null': {
             out.type = 'null';
             break;
         }
-        default:
-            throw new Error(`Unsupported schema kind for JSON Schema: ${desc.kind}`);
+        default: {
+            const _exhaustive: never = desc;
+            throw new Error(
+                `Unsupported schema kind for JSON Schema: ${JSON.stringify(_exhaustive)}`,
+            );
+        }
     }
 
     if (desc.nullable) {
@@ -172,7 +178,6 @@ function renderSchema(schema: SchemaDescription, indent = 0): string[] {
     if (c) head += ` \`${c}\``;
     lines.push(head);
 
-    const ch = schema.children ?? {};
     const pushChild = (label: string, child: SchemaDescription) => {
         const sub = renderSchema(child, indent + 1);
         if (sub.length) {
@@ -181,31 +186,35 @@ function renderSchema(schema: SchemaDescription, indent = 0): string[] {
         }
     };
 
-    if (isSchema(ch.inner)) pushChild('inner', ch.inner);
-    if (Array.isArray(ch.items)) {
-        (ch.items as unknown[]).forEach((it, i) => {
-            if (isSchema(it)) pushChild(`[${i}]`, it);
-        });
-    } else if (isSchema(ch.items)) {
-        pushChild('items', ch.items);
-    }
-    if (Array.isArray(ch.options)) {
-        (ch.options as unknown[]).forEach((opt, i) => {
-            if (isSchema(opt)) pushChild(`option[${i}]`, opt);
-        });
-    }
-    if (ch.properties && typeof ch.properties === 'object') {
-        for (const [k, v] of Object.entries(ch.properties)) {
-            if (isSchema(v)) pushChild(k, v);
+    switch (schema.kind) {
+        case 'array': {
+            pushChild('element', schema.element);
+            break;
         }
+        case 'record': {
+            pushChild('value', schema.value);
+            break;
+        }
+        case 'object': {
+            for (const [k, v] of Object.entries(schema.properties)) {
+                pushChild(k, v);
+            }
+            break;
+        }
+        case 'union': {
+            schema.options.forEach((opt, i) => pushChild(`option[${i}]`, opt));
+            break;
+        }
+        case 'tuple': {
+            schema.elements.forEach((it, i) => pushChild(`[${i}]`, it));
+            break;
+        }
+        default:
+            // 叶子类型：无子节点。
+            break;
     }
-    if (isSchema(ch.values)) pushChild('values', ch.values);
 
     return lines;
-}
-
-function isSchema(v: unknown): v is SchemaDescription {
-    return !!v && typeof v === 'object' && typeof (v as SchemaDescription).kind === 'string';
 }
 
 /** 渲染返回值槽位（Schema / VoidMarker / StreamMarker）。 */
