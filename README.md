@@ -112,8 +112,8 @@ s.boolean()                // boolean
 s.literal('2.0')           // exact literal (string | number | boolean only)
 s.null()                   // exactly null
 s.array(s.string())        // string[]
-s.object({ id: s.number() })
-s.object({ id: s.number() }).strict() // all declared props required, no extras
+s.object({ id: s.number() })                        // all declared props required; extras rejected
+s.object({ id: s.number() }).optionalProperties(['id']) // id may be omitted
 s.record(s.number())       // Record<string, number>
 s.union([s.string(), s.number()])
 s.tuple([s.string(), s.number()])
@@ -135,8 +135,8 @@ s.injectable('request')    // RPC-only: server-injected parameter
 | `.validate(false)` / `.validate(true)` | all schemas | Toggle runtime validation. Default is **on**. When off, `parse` / `safeParse` accept any value and return it unchanged; the schema still describes the type for signatures and the WebUI. |
 | `.optionalProperties(keys)` | object | Whitelist of declared keys that may be missing. |
 | `.allowUnknownProperties(bool)` | object | Whether undeclared keys are kept (`true`) or rejected (`false`). |
-| `.strict()` / `.strict(true)` | object | Shortcut: no missing declared keys + reject extras. |
-| `.strict(false)` | object | Restore the default permissive object config. |
+| `.strict()` / `.strict(true)` | object | Explicitly require every declared key and reject extras (this is the default). |
+| `.strict(false)` | object | Fully permissive: every declared key may be missing and extra keys are kept. |
 
 Validation: `.parse(input)` (throws `SchemaValidationError` when validation is on)
 and `.safeParse(input)` (returns a result object).
@@ -171,33 +171,35 @@ description flag.
 
 ### Object defaults and strictness
 
-By default an object schema is **permissive**:
+By default an object schema is **strict**:
 
-- every declared property may be omitted;
-- undeclared properties are allowed and preserved (if they are valid JSON).
+- every declared property is required;
+- undeclared properties are rejected.
 
 ```ts
-const open = s.object({ name: s.string(), age: s.number() });
-open.parse({});                         // {}
-open.parse({ name: 'Ada', extra: 1 });  // { name: 'Ada', extra: 1 }
-
-const closed = open.strict();
-closed.parse({ name: 'Ada', age: 30 }); // ok
-// missing age → error; extra keys → error
+const closed = s.object({ name: s.string(), age: s.number() });
+closed.parse({ name: 'Ada', age: 30 });             // ok
+closed.parse({});                                   // error: missing name, age
+closed.parse({ name: 'Ada', age: 30, extra: 1 });   // error: unknown property
+// missing declared key → error; extra keys → error
 ```
 
-Finer control without the all-or-nothing `strict()`:
+Loosen each aspect independently:
 
 ```ts
-// only `age` may be missing; still allow unknown keys
+// only `age` may be missing; extras are still rejected
 s.object({ name: s.string(), age: s.number() }).optionalProperties(['age']);
 
-// all declared keys may be missing, but reject extras
-s.object({ name: s.string() }).allowUnknownProperties(false);
+// every declared key is still required, but unknown keys are kept
+s.object({ name: s.string() }).allowUnknownProperties(true);
+
+// fully permissive: all declared keys optional + unknown keys kept
+s.object({ name: s.string() }).strict(false);
 ```
 
 `optionalProperties` rejects key names that are not in the shape (throws
-`TypeError`).
+`TypeError`). `.strict()` is equivalent to the default and mainly documents
+intent; `.strict(false)` is the shortcut for a fully permissive object.
 
 ### Nullability notes
 
@@ -228,7 +230,8 @@ constraints: {
 }
 ```
 
-Empty constraint objects are omitted (no `constraints: {}`).
+Empty constraint objects are omitted (no `constraints: {}`). Descriptions are
+omitted when unset or empty (no `description: ""`).
 
 When validation is disabled, the description includes `validate: false`.
 The default enabled state is not serialized.
@@ -237,7 +240,7 @@ Stream returns from `system.methodSignature` / `signatureOf` currently use a
 small exception for the marker shape:
 
 ```ts
-{ kind: 'stream', inner: <SchemaDescription> }
+{ kind: 'stream', children: { inner: <SchemaDescription> } }
 ```
 
 ## Transports

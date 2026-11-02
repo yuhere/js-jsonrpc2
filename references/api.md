@@ -136,8 +136,8 @@ Bounded schema types expose `.min(value)` and `.max(value)` where supported.
 | `s.boolean()` | Validates booleans. Extends `NullableSchema`; supports `.nullable`, `.describe`. |
 | `s.enum(values)` | Accepts one of a non-empty tuple of strings. Extends `NullableSchema`; supports `.nullable`, `.describe`. |
 | `s.array(itemSchema)` | Validates an array whose items match the schema. Extends `NullableSchema`; supports `.min`, `.max`, `.nullable`, `.describe`. |
-| `s.object(shape)` | Validates an object with the declared properties. Extends `NullableSchema`. By default, missing declared properties are omitted from the output and unknown keys are not rejected. |
-| `s.object(shape).strict()` | Requires every declared property and rejects undeclared properties; returns a stricter inferred output type. |
+| `s.object(shape)` | Validates an object with the declared properties. Extends `NullableSchema`. By default every declared property is required and unknown keys are rejected (strict). |
+| `s.object(shape).strict()` | Explicit alias for the default strict behavior: every declared property is required and undeclared properties are rejected. |
 | `s.record(valueSchema)` | Validates an object whose values all match the supplied schema. Extends `NullableSchema`; supports `.min`, `.max`, `.nullable`, `.describe`. |
 | `s.union([schema, ...])` | Accepts a value matching at least one schema; requires a non-empty tuple. Extends `NullableSchema`. Member schemas are cloned and set to `nullable(false)` at construction — nullability is decided by the union itself via `.nullable()`. |
 | `s.tuple([schema, ...])` | Validates a tuple against its positional schemas; requires a non-empty tuple. Extends `NullableSchema`; supports `.nullable`, `.describe`. |

@@ -172,9 +172,9 @@ All schemas expose `.describe(text)` and `.toJSON()`. Schemas that extend `Nulla
 - `.describe(text)` — attach human-readable description metadata.
 - `.nullable(value?: boolean)` — allow `null` (default `true`); `nullable(false)` clears it. Immutable. Not available on `s.unknown()` or `s.null()`.
 - `.min(value)` and `.max(value)` — add bounds where the schema kind supports them.
-- `.strict()` — available on object schemas; require declared properties and reject unknown properties.
+- `.strict()` — available on object schemas; require declared properties and reject unknown properties (this is the default).
 
-Object schemas are not strict by default. Applications requiring exact object shape SHOULD explicitly call `.strict()`. `s.unknown()` already accepts `null`; `.nullable()` is neither exposed nor needed on it. `s.literal(v)` rejects `null` at construction; use `s.null()` for an exact `null` value, or `.nullable()` for "literal or null". `s.union([...])` strips member-level nullability at construction, so only the union's own `.nullable()` decides whether `null` is accepted.
+Object schemas are strict by default: every declared property is required and unknown properties are rejected. Use `.optionalProperties(keys)` to allow selected declared keys to be missing, `.allowUnknownProperties(true)` to keep unknown keys, or `.strict(false)` for a fully permissive object. `s.unknown()` already accepts `null`; `.nullable()` is neither exposed nor needed on it. `s.literal(v)` rejects `null` at construction; use `s.null()` for an exact `null` value, or `.nullable()` for "literal or null". `s.union([...])` strips member-level nullability at construction, so only the union's own `.nullable()` decides whether `null` is accepted.
 
 Schemas provide parsing/validation and structured descriptions for introspection. TypeScript types describe compile-time expectations; they do not replace runtime validation of data received over the network.
 

@@ -512,17 +512,17 @@ function ContainerChildren({
         );
     }
 
-    // object → properties；非 strict 提示基于 allowUnknownProps
+    // object → properties；宽松提示基于 allowUnknownProps
     if (schema.kind === 'object') {
         const props = (schema.properties ?? {}) as Record<string, unknown>;
         const obj =
             value && typeof value === 'object' && !Array.isArray(value)
                 ? (value as Record<string, unknown>)
                 : {};
-        // 新约束：allowUnknownProps 默认 true；false 表示拒绝额外属性（strict 的一部分）
+        // 约束：allowUnknownProps 默认 false；true 表示保留额外属性（strict(false) 的一部分）
         const allowUnknown =
             (schema.constraints as { allowUnknownProps?: boolean } | undefined)
-                ?.allowUnknownProps !== false;
+                ?.allowUnknownProps === true;
         return (
             <div>
                 {Object.entries(props).map(([key, prop]) => {

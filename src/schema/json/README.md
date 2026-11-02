@@ -116,19 +116,19 @@ s.string().nullable().nullable(false); // string
 
 ```ts
 s.object({ name: s.string() });
-// name 可缺失；额外属性允许并保留
+// name 必填；额外属性报错（默认即 strict）
 
-s.object({ name: s.string() }).optionalProperties([]);
-// 已声明属性必填；额外属性仍允许
+s.object({ name: s.string() }).optionalProperties(['name']);
+// name 可缺失；额外属性仍报错
 
-s.object({ name: s.string() }).allowUnknownProperties(false);
-// name 可缺失；额外属性报错
+s.object({ name: s.string() }).allowUnknownProperties(true);
+// name 必填；额外属性允许并保留
 
 s.object({ name: s.string() }).strict();
-// ≡ optionalProperties([]).allowUnknownProperties(false)
+// ≡ optionalProperties([]).allowUnknownProperties(false)，即默认配置
 
 s.object({ name: s.string() }).strict(false);
-// 恢复默认宽松
+// 完全宽松：所有已声明属性可缺失 + 未知属性保留
 ```
 
 `optionalProperties(keys)` 中的 key 必须落在 `shape` 上，否则抛 `TypeError`。未知属性判定使用 `Object.prototype.hasOwnProperty.call(shape, key)`，避免原型链键（如 `"toString"`）被当成已声明属性。
@@ -215,7 +215,7 @@ s.number().validate(false).validate(true); // 可撤销，与 nullable 一致
 公共字段：
 
 - `kind`
-- `description?`
+- `description?`（未设置或为空字符串时 **省略**）
 - `nullable?`
 - `constraints?`（无约束时 **省略**，不输出 `{}`）
 - `validate?: false`（仅在关闭校验时出现）
@@ -265,7 +265,7 @@ s.string().min(1).validate(false)
 **Stream 例外**：`signatureOf` / `system.methodSignature` 对返回位上的 stream 标记目前输出：
 
 ```ts
-{ kind: 'stream', inner: <SchemaDescription> }
+{ kind: 'stream', children: { inner: <SchemaDescription> } }
 ```
 
 ## 8. 文件划分

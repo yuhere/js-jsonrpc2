@@ -93,7 +93,7 @@ function convert(desc: SchemaDescription): JSONSchema {
             );
             const allowUnknown =
                 ((desc.constraints as { allowUnknownProps?: boolean } | undefined)
-                    ?.allowUnknownProps) ?? true;
+                    ?.allowUnknownProps) ?? false;
 
             const props = desc.properties;
             out.properties = {};

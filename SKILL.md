@@ -43,13 +43,16 @@ Hard constraints (by design, do not work around):
      - Prefer this only when a param is intentionally untrusted-schema or
        validated elsewhere; do not use it as a substitute for `s.unknown()`.
    - Object shape control:
-     - Default object is **permissive**: every declared key may be missing;
-       undeclared keys are kept if they are valid JSON.
+     - Default object is **strict**: every declared key is required;
+       undeclared keys are rejected.
      - `.optionalProperties(keys)` — whitelist of declared keys that may be
        missing (unknown names throw `TypeError`).
-     - `.allowUnknownProperties(bool)` — keep (`true`) or reject (`false`) extras.
-     - `.strict()` / `.strict(true)` — no missing declared keys + reject extras.
-     - `.strict(false)` — restore the default permissive config.
+     - `.allowUnknownProperties(bool)` — keep (`true`) or reject (`false`, the
+       default) extras.
+     - `.strict()` / `.strict(true)` — the default: no missing declared keys +
+       reject extras.
+     - `.strict(false)` — fully permissive: all declared keys optional + extra
+       keys kept.
 8. Nullability rules:
    - `.nullable()` / `.nullable(true)` allow `null`; `.nullable(false)` clears it. Calls are immutable.
    - `s.unknown()` and `s.null()` already handle `null`; they do not expose `.nullable()`.
@@ -100,7 +103,8 @@ constraints: {
 }
 ```
 
-Empty constraint objects are omitted (no `constraints: {}`).
+Empty constraint objects are omitted (no `constraints: {}`). Empty
+descriptions are omitted too (no `description: ""`).
 
 When validation is turned off, the description includes an explicit flag
 (default is on and omitted to keep noise low):
@@ -114,7 +118,7 @@ Do **not** read legacy paths such as `children.items` or `children.values`.
 Stream returns are the exception (marker path in `signatureOf`):
 
 ```ts
-{ kind: 'stream', inner: <SchemaDescription> }
+{ kind: 'stream', children: { inner: <SchemaDescription> } }
 ```
 
 ## Stream a return value
@@ -331,9 +335,9 @@ that slot at runtime.
 - **Calling `s.literal(null)`.** `literal` only accepts `string | number |
   boolean`; construction throws `TypeError`. Use `s.null()` for exact null, or
   `.nullable()` for "literal or null".
-- **Treating default `s.object(...)` as strict.** By default all declared keys
-  may be missing and unknown keys are kept. Use `.strict()` or
-  `.optionalProperties` / `.allowUnknownProperties` for tighter rules.
+- **Treating default `s.object(...)` as permissive.** By default all declared
+  keys are required and unknown keys are rejected. Use `.optionalProperties(...)`,
+  `.allowUnknownProperties(true)`, or `.strict(false)` to loosen it.
 - **Reading schema descriptions via `children.items` / `children.values`.**
   Those paths are gone. Use `element`, `value`, `properties`, `options`,
   `elements`. Only stream markers still use `children.inner`.

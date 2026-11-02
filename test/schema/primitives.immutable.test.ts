@@ -28,7 +28,7 @@ describe("immutable schema modifiers", () => {
     const described = base.describe("Name");
 
     expect(described).not.toBe(base);
-    expect(base.toJSON().description).toBe("");
+    expect(base.toJSON()).not.toHaveProperty("description");
     expect(described.toJSON()).toMatchObject({
       kind: "string",
       description: "Name",

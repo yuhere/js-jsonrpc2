@@ -181,9 +181,9 @@ Schema 系统描述与 JSON 兼容的值。其 JSON 类型模型包括字符串�
 - `.describe(text)`：附加便于人类阅读的描述元数据。
 - `.nullable(value?: boolean)`：允许 `null`（默认 `true`）；`nullable(false)` 撤销。不可变。`s.unknown()` 与 `s.null()` 不提供此方法。
 - `.min(value)` 和 `.max(value)`：在 Schema 类型支持时添加边界约束。
-- `.strict()`：用于对象 Schema，要求声明的属性存在，并拒绝未声明的属性。
+- `.strict()`：用于对象 Schema，要求声明的属性存在，并拒绝未声明的属性（这是默认行为）。
 
-对象 Schema 默认不是严格模式。需要精确对象结构的应用 **SHOULD** 显式调用 `.strict()`。`s.unknown()` 本身已经接受 `null`，因此 `.nullable()` 既不暴露也无必要。`s.literal(v)` 在构造时拒绝 `null`；要表达「就是 null」用 `s.null()`，要表达「字面量或 null」用 `.nullable()`。`s.union([...])` 在构造时会剥离成员的 nullable，只有 union 自身的 `.nullable()` 决定是否接受 `null`。
+对象 Schema 默认是严格模式：所有声明的属性必填，且拒绝未声明属性。要放宽可分别使用 `.optionalProperties(keys)`（允许指定已声明属性缺失）、`.allowUnknownProperties(true)`（保留未知属性），或 `.strict(false)`（完全宽松）。`s.unknown()` 本身已经接受 `null`，因此 `.nullable()` 既不暴露也无必要。`s.literal(v)` 在构造时拒绝 `null`；要表达「就是 null」用 `s.null()`，要表达「字面量或 null」用 `.nullable()`。`s.union([...])` 在构造时会剥离成员的 nullable，只有 union 自身的 `.nullable()` 决定是否接受 `null`。
 
 Schema 提供解析/校验能力以及用于自省的结构化描述。TypeScript 类型描述编译期预期，不能替代对网络接收数据的运行时校验。
 

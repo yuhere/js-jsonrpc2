@@ -802,7 +802,7 @@ describe("NullSchema", () => {
     });
 
     it("describes itself as kind 'null' and has no nullable flag", () => {
-        expect(s.null().toJSON()).toEqual({ kind: "null", description: "" });
+        expect(s.null().toJSON()).toEqual({ kind: "null" });
     });
 
     it("does not expose .nullable()", () => {
@@ -820,6 +820,13 @@ describe("empty constraints omission", () => {
         expect(s.boolean().toJSON()).not.toHaveProperty("constraints");
         expect(s.record(s.string()).toJSON()).not.toHaveProperty(
             "constraints",
+        );
+    });
+
+    it("omits description when unset or empty", () => {
+        expect(s.string().toJSON()).not.toHaveProperty("description");
+        expect(s.string().describe("").toJSON()).not.toHaveProperty(
+            "description",
         );
     });
 

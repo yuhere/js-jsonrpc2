@@ -141,7 +141,8 @@ export abstract class Schema<T> {
     const result = this._describe();
     const description = this.getDescription();
 
-    if (description !== undefined) {
+    // Omit unset/empty descriptions so descriptions stay small.
+    if (description.length > 0) {
       result.description = description;
     }
 
