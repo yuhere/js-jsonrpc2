@@ -105,10 +105,19 @@ export async function serveStdio(
       try {
         buffer += typeof chunk === 'string' ? chunk : decoder.write(chunk);
 
+        const assertFrameSize = (frame: string): void => {
+          if (frame.length > maxFrameBytes) {
+            throw new Error(
+              `JSON-RPC frame exceeded ${maxFrameBytes} bytes without terminator.`,
+            );
+          }
+        };
+
         if (framing === 'lines') {
           const parts = buffer.split('\n');
           buffer = parts.pop() ?? '';
           for (const line of parts) {
+            assertFrameSize(line);
             const trimmed = line.trim();
             if (trimmed.length > 0) {
               beginDispatch(trimmed);
@@ -123,6 +132,7 @@ export async function serveStdio(
             if (slice === undefined) break;
             consumed += slice.length;
             rest = rest.slice(slice.length);
+            assertFrameSize(slice);
             if (slice.trim().length > 0) {
               beginDispatch(slice);
             }
@@ -130,11 +140,7 @@ export async function serveStdio(
           buffer = rest;
         }
 
-        if (buffer.length > maxFrameBytes) {
-          throw new Error(
-            `JSON-RPC frame exceeded ${maxFrameBytes} bytes without terminator.`,
-          );
-        }
+        assertFrameSize(buffer);
       } catch (error) {
         reject(error);
       }

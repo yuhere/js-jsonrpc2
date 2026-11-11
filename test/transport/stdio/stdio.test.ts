@@ -31,6 +31,44 @@ function frames(out: string): Array<{ id: number; result?: unknown; error?: { co
 }
 
 describe('serveStdio', () => {
+  it('rejects a complete line larger than maxFrameBytes', async () => {
+    const repository = new Repository({ withSystemMethods: false });
+    repository.register(
+      { namespace: 'echo', signature: [s.string(), s.string()] },
+      (value: string) => value,
+    );
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const done = serveStdio({
+      repository,
+      input,
+      output,
+      framing: 'lines',
+      maxFrameBytes: 40,
+    });
+    input.end(line('echo', ['x'.repeat(80)], 1) + '\n');
+    await expect(done).rejects.toThrow(/exceeded 40 bytes/);
+  });
+
+  it('rejects an oversized JSON value in json framing', async () => {
+    const repository = new Repository({ withSystemMethods: false });
+    repository.register(
+      { namespace: 'echo', signature: [s.string(), s.string()] },
+      (value: string) => value,
+    );
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const done = serveStdio({
+      repository,
+      input,
+      output,
+      framing: 'json',
+      maxFrameBytes: 20,
+    });
+    input.end(line('echo', ['hello'], 1));
+    await expect(done).rejects.toThrow(/exceeded 20 bytes/);
+  });
+
   it('writes a slow handler response before resolving', async () => {
     const repository = new Repository({ withSystemMethods: false });
     repository.register(
