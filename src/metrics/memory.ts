@@ -21,13 +21,16 @@ const TTFB_BUCKETS = [
     0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5,
 ] as const;
 
+/** Prometheus 文本格式里 +Inf 桶的上界。JSON 没有 Infinity，所以用这个字符串。 */
+export const HISTOGRAM_POSITIVE_INF = '+Inf';
+
 export interface HistogramSnapshot {
     count: number;
     sum: number;
     min: number;
     max: number;
-    /** 上界（含）→ 累计计数；最后一个桶是 +Inf。 */
-    buckets: Array<{ le: number; count: number }>;
+    /** 上界（含）→ 累计计数；最后一个桶是 `+Inf`。 */
+    buckets: Array<{ le: number | typeof HISTOGRAM_POSITIVE_INF; count: number }>;
 }
 
 export interface MethodStats {
@@ -102,14 +105,14 @@ function observeHistogram(h: HistogramState, value: number): void {
 }
 
 function snapshotHistogram(h: HistogramState): HistogramSnapshot {
-    const buckets: Array<{ le: number; count: number }> = [];
+    const buckets: Array<{ le: number | typeof HISTOGRAM_POSITIVE_INF; count: number }> = [];
     let cumulative = 0;
     for (let i = 0; i < h.bounds.length; i++) {
         cumulative += h.bucketCounts[i]!;
         buckets.push({ le: h.bounds[i]!, count: cumulative });
     }
     cumulative += h.bucketCounts[h.bounds.length]!;
-    buckets.push({ le: Number.POSITIVE_INFINITY, count: cumulative });
+    buckets.push({ le: HISTOGRAM_POSITIVE_INF, count: cumulative });
     return {
         count: h.count,
         sum: h.sum,

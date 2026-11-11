@@ -1,4 +1,7 @@
 import type { RPCClient } from '../client';
+import { quantileFromHistogram } from './histogram';
+
+export { quantileFromHistogram };
 
 // ─── 与后端 memory.ts 对齐的类型（只读快照） ─────────────────
 
@@ -7,7 +10,8 @@ export interface HistogramSnapshot {
     sum: number;
     min: number;
     max: number;
-    buckets: Array<{ le: number; count: number }>;
+    /** 有限上界，或 Prometheus 的 `"+Inf"`。 */
+    buckets: Array<{ le: number | '+Inf'; count: number }>;
 }
 
 export interface StreamStats {
@@ -59,34 +63,6 @@ export async function fetchMetrics(rpc: RPCClient): Promise<MetricsSnapshot | un
 }
 
 // ─── 派生计算 ───────────────────────────────────────────────
-
-/** 在给定直方图上估算某个分位数（线性插值）。 */
-export function quantileFromHistogram(h: HistogramSnapshot, q: number): number {
-    if (h.count === 0) return 0;
-    const target = q * h.count;
-    let prevLe = 0;
-    let prevCount = 0;
-    for (const b of h.buckets) {
-        if (b.le === Number.POSITIVE_INFINITY) {
-            // +Inf 桶：用 max 作为上界估计
-            const lo = prevLe;
-            const hi = h.max;
-            const span = b.count - prevCount || 1;
-            const ratio = (target - prevCount) / span;
-            return lo + (hi - lo) * ratio;
-        }
-        if (b.count >= target) {
-            const lo = prevLe;
-            const hi = b.le;
-            const span = b.count - prevCount || 1;
-            const ratio = (target - prevCount) / span;
-            return lo + (hi - lo) * ratio;
-        }
-        prevLe = b.le;
-        prevCount = b.count;
-    }
-    return h.max;
-}
 
 export interface MethodDerived {
     method: string;
