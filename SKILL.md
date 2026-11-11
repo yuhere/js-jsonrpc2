@@ -259,6 +259,14 @@ ordinary `result`. Use `isStreamResult(x)` to narrow.
   bad first frame), so the connection is aborted and the server's
   `res.on('close')` fires. A clean read lets the connection return to the pool;
   it does not cancel.
+- HTTP `timeout` on `createRPC` / `createHttpRPC` is a millisecond limit.
+  Omit it, or pass a non-positive number, for no limit. Override one call
+  with `httpCallOptions({ timeout, signal })` as the last `call` argument.
+  `timeout: 0` on that call disables a client timeout. Either the timer or
+  the `AbortSignal` aborts the call, including a streaming body. A timeout
+  throws `HttpTimeoutError`. A caller abort rejects with `AbortError`.
+  Network and HTTP status failures stay their original errors. A plain object
+  is still a JSON-RPC parameter; only `httpCallOptions(...)` is stripped.
 - WS transport routes the first message via a one-shot waiter, then streams
   subsequent frames per `id`.
 

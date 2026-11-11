@@ -19,5 +19,8 @@
     },
     "include": [
         "webui/src/client/**/*.ts"
+    ],
+    "exclude": [
+        "webui/src/client/**/*.test.ts"
     ]
 }

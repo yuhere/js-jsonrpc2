@@ -17,6 +17,8 @@ export interface RPCOptions {
   endpoint?: string;
   headers?: Record<string, string>;
   fetchImpl?: typeof fetch;
+  /** HTTP only. Milliseconds. Omitted or non-positive means no limit. */
+  timeout?: number;
   connectTimeoutMs?: number;
   callTimeoutMs?: number;
 }
@@ -53,6 +55,7 @@ export function createRPC(options: RPCOptions): RPCClient {
     endpoint: options.endpoint,
     headers: options.headers,
     fetchImpl: options.fetchImpl,
+    timeout: options.timeout,
   };
   return createHttpRPC(httpOpts);
 }

@@ -9,7 +9,13 @@ export {
 } from './rpc';
 
 export type { RPCErrorPayload, RPCResponse } from './types';
-export { type HttpRPCOptions, absoluteEndpoint } from './httpTransport';
+export {
+    HttpTimeoutError,
+    httpCallOptions,
+    absoluteEndpoint,
+    type HttpRPCOptions,
+    type HttpCallOptions,
+} from './httpTransport';
 export type { WsRPCOptions } from './wsTransport';
 
 
