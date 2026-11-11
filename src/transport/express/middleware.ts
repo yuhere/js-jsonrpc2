@@ -88,9 +88,8 @@ async function handleError(
   error: unknown
 ): Promise<void> {
   if (error instanceof RPCError) {
-    const data = process.env['NODE_ENV'] !== 'production' ? error.data : undefined;
     const payload = error.toPayload();
-    if (data !== undefined) payload.data = data;
+    if (process.env['NODE_ENV'] === 'production') delete payload.data;
     await respond(res, { jsonrpc: RPCVersion, id: null, error: payload });
     return;
   }
