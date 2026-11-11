@@ -509,7 +509,7 @@ export class ObjectSchema<S extends ObjectShape> extends NullableSchema<ObjectOu
       }
 
       try {
-        output[key] = schema.parse(source[key]);
+        assignJsonKey(output, key, schema.parse(source[key]));
       } catch (error) {
         if (error instanceof SchemaValidationError) {
           throw new SchemaValidationError(error.message, [
@@ -526,7 +526,7 @@ export class ObjectSchema<S extends ObjectShape> extends NullableSchema<ObjectOu
       for (const [key, value] of Object.entries(source)) {
         if (!Object.prototype.hasOwnProperty.call(this.shape, key)) {
           assertJSONValue(value, [...path, key]);
-          output[key] = value;
+          assignJsonKey(output, key, value);
         }
       }
     }
@@ -594,7 +594,7 @@ export class RecordSchema<T> extends NullableSchema<Record<string, T>> {
 
     for (const [key, value] of entries) {
       try {
-        output[key] = this.valueSchema.parse(value);
+        assignJsonKey(output, key, this.valueSchema.parse(value));
       } catch (error) {
         if (error instanceof SchemaValidationError) {
           throw new SchemaValidationError(error.message, [
@@ -794,6 +794,23 @@ export class NullSchema extends Schema<null> {
   protected _describe(): LeafSchemaDescription {
     return { kind: this.kind };
   }
+}
+
+/**
+ * Store `key` as an own data property.
+ *
+ * `target[key] = value` runs Object.prototype's `__proto__` setter and can
+ * replace the output object's prototype. defineProperty keeps `__proto__`,
+ * `constructor`, and `prototype` as ordinary enumerable fields, and the
+ * result stays a normal object (`Object.prototype`).
+ */
+function assignJsonKey(target: object, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
 }
 
 function buildConstraints(
