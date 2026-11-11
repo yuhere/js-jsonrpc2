@@ -335,6 +335,9 @@ descriptor)` is called:
 - returns an `RPCError` → re-thrown as-is
 - anything else → `PERMISSION_DENIED (-32604)`
 
+`grantTo` is only enforced when a `perm_check` injectable is provided. Without
+`perm_check`, methods that declare `grantTo` are callable by anyone.
+
 ```ts
 app.use('/', createExpressRouter(repository, {
   mkInjectable: (req, res, repo) => ({
