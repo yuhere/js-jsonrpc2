@@ -6,6 +6,8 @@ import type {
   InjectableFactory,
   Injections,
   RPCErrorTransform,
+  RPCFailure,
+  RPCResId,
   RPCResponse,
   RPCStreamChunk,
   RPCStreamSuccess,
@@ -51,7 +53,8 @@ function isStreamSuccess(payload: unknown): payload is RPCStreamSuccess {
  * This is useful for IDE/CLI integrations where each request is a single line
  * of JSON on stdin and each response is a single line of JSON on stdout.
  *
- * Resolves when the input stream ends.
+ * Resolves when the input stream ends and every response started from it
+ * has been written.
  */
 export async function serveStdio(
   options: StdioOptions = {},
@@ -67,6 +70,9 @@ export async function serveStdio(
 
   // Serialize writes so responses don't interleave.
   let writeChain: Promise<void> = Promise.resolve();
+  // Handlers can still be running when input ends. This set is what keeps
+  // serveStdio from resolving before their responses are queued.
+  const inflight = new Set<Promise<void>>();
 
   const ctx: StdioContext = {
     repository,
@@ -77,6 +83,21 @@ export async function serveStdio(
       writeChain = p;
     },
     output,
+  };
+
+  const beginDispatch = (text: string): void => {
+    const task = dispatch(ctx, text);
+    inflight.add(task);
+    // Handle the rejection here so a dispatch that fails after `end` is not
+    // an unhandled rejection. Promise.all below still observes `task`.
+    void task.then(
+      () => {
+        inflight.delete(task);
+      },
+      () => {
+        inflight.delete(task);
+      },
+    );
   };
 
   await new Promise<void>((resolve, reject) => {
@@ -90,7 +111,7 @@ export async function serveStdio(
           for (const line of parts) {
             const trimmed = line.trim();
             if (trimmed.length > 0) {
-              void dispatch(ctx, trimmed);
+              beginDispatch(trimmed);
             }
           }
         } else {
@@ -103,7 +124,7 @@ export async function serveStdio(
             consumed += slice.length;
             rest = rest.slice(slice.length);
             if (slice.trim().length > 0) {
-              void dispatch(ctx, slice);
+              beginDispatch(slice);
             }
           }
           buffer = rest;
@@ -124,13 +145,24 @@ export async function serveStdio(
       const trailing = framing === 'lines' ? buffer.trim() : buffer.trim();
       buffer = '';
       if (trailing.length > 0) {
-        void dispatch(ctx, trailing);
+        beginDispatch(trailing);
       }
       input.off('data', onData);
       input.off('end', onEnd);
       input.off('error', onError);
-      // Wait for outstanding writes to drain before resolving.
-      writeChain.then(() => resolve(), reject);
+      void (async () => {
+        try {
+          // A finishing dispatch cannot start another one, but deletion from
+          // `inflight` races the Promise.all callback, so repeat until quiet.
+          while (inflight.size > 0) {
+            await Promise.all([...inflight]);
+          }
+          await writeChain;
+          resolve();
+        } catch (error) {
+          reject(error);
+        }
+      })();
     };
 
     const onError = (error: Error) => {
@@ -226,40 +258,77 @@ async function enqueueWrite(
   ctx: StdioContext,
   payload: RPCResponse | RPCStreamChunk,
 ): Promise<void> {
-  const next = ctx.writeChain().then(
-    () =>
-      new Promise<void>(async (resolve) => {
-        const text = await stringify(payload) + '\n';
-        let done = false;
-        const finish = () => {
-          if (done) return;
-          done = true;
-          resolve();
-        };
-        try {
-          const flushed = ctx.output.write(text, 'utf8', finish);
-          if (flushed) {
-            // Node may not call the callback if the buffer was already flushed
-            // for some streams; still resolve on next tick to be safe.
-            queueMicrotask(finish);
-          }
-        } catch (error) {
-          if (process.env['NODE_ENV'] !== 'production') {
-            console.error('Failed to write JSON-RPC response to stdio', error);
-          }
-          finish();
-        }
-        if ('chunks' in payload === false && ctx.options.onResponse) {
-          try {
-            ctx.options.onResponse(payload as RPCResponse);
-          } catch {
-            /* ignore listener errors */
-          }
-        }
-      }),
-  );
+  const run = async (): Promise<void> => {
+    let text: string;
+    let reported: RPCResponse | undefined;
+    try {
+      text = (await stringify(payload)) + '\n';
+      if (!('chunks' in payload)) reported = payload as RPCResponse;
+    } catch (error) {
+      reported = serializationFailure(frameId(payload), error);
+      text = JSON.stringify(reported) + '\n';
+    }
+    await writeLine(ctx, text);
+    if (reported && ctx.options.onResponse) {
+      try {
+        ctx.options.onResponse(reported);
+      } catch {
+        /* ignore listener errors */
+      }
+    }
+  };
+
+  // Run after the previous write whether that write succeeded or failed,
+  // so one bad payload cannot stall the rest of the chain.
+  const next = ctx.writeChain().then(run, run);
   ctx.setWriteChain(next);
   await next;
+}
+
+function writeLine(ctx: StdioContext, text: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    try {
+      const flushed = ctx.output.write(text, 'utf8', finish);
+      if (flushed) {
+        // Node may not call the callback if the buffer was already flushed
+        // for some streams; still resolve on next tick to be safe.
+        queueMicrotask(finish);
+      }
+    } catch (error) {
+      if (process.env['NODE_ENV'] !== 'production') {
+        console.error('Failed to write JSON-RPC response to stdio', error);
+      }
+      finish();
+    }
+  });
+}
+
+function frameId(payload: RPCResponse | RPCStreamChunk): RPCResId {
+  const id = payload.id;
+  if (typeof id === 'string' || typeof id === 'number') return id;
+  return null;
+}
+
+function serializationFailure(id: RPCResId, error: unknown): RPCFailure {
+  const message = error instanceof Error ? error.message : String(error);
+  const failure: RPCFailure = {
+    jsonrpc: RPCVersion,
+    id,
+    error: {
+      code: INTERNAL_ERROR,
+      message: 'Internal error',
+    },
+  };
+  if (process.env['NODE_ENV'] !== 'production') {
+    failure.error.data = message;
+  }
+  return failure;
 }
 
 function buildInjectables(
