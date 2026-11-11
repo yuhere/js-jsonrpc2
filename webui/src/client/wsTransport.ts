@@ -1,4 +1,4 @@
-import type { RPCResponse } from './types';
+import type { RPCErrorPayload, RPCResponse } from './types';
 import {
     RPCError,
     type RPCClient,
@@ -11,10 +11,10 @@ export interface WsRPCOptions {
     callTimeoutMs?: number;
 }
 
-interface Pending {
-    resolve: (v: unknown) => void;
-    reject: (e: unknown) => void;
+interface FirstWaiter {
     timer: ReturnType<typeof setTimeout>;
+    resolve: (msg: RPCResponse | StreamFrame) => void;
+    reject: (err: unknown) => void;
 }
 
 interface StreamSub {
@@ -31,9 +31,6 @@ interface StreamFrame {
     value?: unknown;
     error?: { code: number; message: string };
 }
-
-/** 首帧等待器：resolve 到原始消息对象，由 call 决定走哪条路。 */
-type FirstWaiter = (msg: RPCResponse | StreamFrame) => void;
 
 let idCounter = 0;
 
@@ -54,7 +51,6 @@ export function createWsRPC(options: WsRPCOptions = {}): RPCClient {
         callTimeoutMs = 15000,
     } = options;
 
-    const pending = new Map<number | string, Pending>();
     const streams = new Map<number | string, StreamSub>();
     const firstWaiters = new Map<number | string, FirstWaiter>();
     let socket: WebSocket | null = null;
@@ -62,24 +58,45 @@ export function createWsRPC(options: WsRPCOptions = {}): RPCClient {
     let closedByUser = false;
 
     function rejectAll(reason: string) {
-        for (const [, p] of pending) {
-            clearTimeout(p.timer);
-            p.reject(new Error(reason));
+        const error = new RPCError({ code: -32603, message: reason });
+        for (const [id, waiter] of [...firstWaiters]) {
+            firstWaiters.delete(id);
+            waiter.reject(error);
         }
-        pending.clear();
-        for (const [, sub] of streams) {
+        for (const [id, sub] of [...streams]) {
+            streams.delete(id);
             sub.fail(new Error(reason));
         }
-        streams.clear();
-        for (const [, w] of firstWaiters) {
-            // 首帧没等到连接就关了：用一个假的 failure 消息唤醒，让它走普通失败分支
-            w({
-                jsonrpc: '2.0',
-                id: 0,
-                error: { code: -32603, message: reason },
-            } as RPCResponse);
+    }
+
+    function failInFlight(payload: RPCErrorPayload): void {
+        const inflight = firstWaiters.size + streams.size;
+        if (inflight === 0) return;
+        const error = new RPCError(payload);
+        if (inflight === 1) {
+            const waiting = firstWaiters.entries().next();
+            if (!waiting.done) {
+                const [id, waiter] = waiting.value;
+                firstWaiters.delete(id);
+                waiter.reject(error);
+                return;
+            }
+            const streaming = streams.entries().next();
+            if (!streaming.done) {
+                const [id, sub] = streaming.value;
+                streams.delete(id);
+                sub.fail(error);
+            }
+            return;
         }
-        firstWaiters.clear();
+        for (const [id, waiter] of [...firstWaiters]) {
+            firstWaiters.delete(id);
+            waiter.reject(error);
+        }
+        for (const [id, sub] of [...streams]) {
+            streams.delete(id);
+            sub.fail(error);
+        }
     }
 
     function attach(ws: WebSocket) {
@@ -93,13 +110,16 @@ export function createWsRPC(options: WsRPCOptions = {}): RPCClient {
             const list = Array.isArray(data) ? data : [data];
             for (const msg of list) {
                 if (!msg || typeof msg !== 'object') continue;
-                if (msg.id == null) continue;
+                if (msg.id == null) {
+                    if (msg.error) failInFlight(msg.error);
+                    continue;
+                }
 
                 // 1) 首帧等待者
                 const fw = firstWaiters.get(msg.id);
                 if (fw) {
                     firstWaiters.delete(msg.id);
-                    fw(msg as RPCResponse | StreamFrame);
+                    fw.resolve(msg as RPCResponse | StreamFrame);
                     continue;
                 }
 
@@ -118,17 +138,7 @@ export function createWsRPC(options: WsRPCOptions = {}): RPCClient {
                         continue;
                     }
                     if (msg.value !== undefined) sub.push(msg.value);
-                    continue;
                 }
-
-                // 3) 普通响应
-                const p = pending.get(msg.id);
-                if (!p) continue;
-                pending.delete(msg.id);
-                clearTimeout(p.timer);
-                const plain = msg as RPCResponse;
-                if (plain.error) p.reject(new RPCError(plain.error));
-                else p.resolve(plain.result);
             }
         });
 
@@ -203,16 +213,27 @@ export function createWsRPC(options: WsRPCOptions = {}): RPCClient {
                     reject(new Error(`调用 ${method} 超时（${callTimeoutMs}ms）`));
                 }, callTimeoutMs);
 
-                firstWaiters.set(id, (msg) => {
-                    clearTimeout(timer);
-                    resolve(msg);
+                firstWaiters.set(id, {
+                    timer,
+                    resolve: (msg) => {
+                        clearTimeout(timer);
+                        resolve(msg);
+                    },
+                    reject: (err) => {
+                        clearTimeout(timer);
+                        reject(err);
+                    },
                 });
             });
 
             try {
                 ws.send(JSON.stringify(payload));
             } catch (e) {
-                firstWaiters.delete(id);
+                const waiter = firstWaiters.get(id);
+                if (waiter) {
+                    firstWaiters.delete(id);
+                    clearTimeout(waiter.timer);
+                }
                 throw e;
             }
 
