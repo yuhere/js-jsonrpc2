@@ -261,8 +261,11 @@ app.use('/', createExpressRouter(repository, {
 }));
 ```
 
-The router handles `POST /` only. `useHtdoc` serves the bundled web UI
-(static assets under `htdoc/`).
+The router handles `POST /` only. A POST whose `Content-Type` is not
+`application/json` gets HTTP 415 and a JSON-RPC `Invalid Request`
+(`-32600`, `id` null). Malformed JSON still returns `-32700`. `useHtdoc`
+serves the bundled web UI (static assets under `htdoc/`) for other methods
+such as GET.
 
 ### WebSocket
 

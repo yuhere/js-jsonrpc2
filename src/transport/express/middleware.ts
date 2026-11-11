@@ -5,7 +5,7 @@ import type { NextFunction, Request, RequestHandler, Response, Router } from 'ex
 import typeIs from 'type-is';
 import { Repository } from '../../core/Repository';
 import { RPCError } from '../../errors/RPCError';
-import { INTERNAL_ERROR } from '../../errors/codes';
+import { INTERNAL_ERROR, INVALID_REQUEST } from '../../errors/codes';
 import type { InjectableFactory, Injections, RPCResponse, RPCErrorTransform } from '../../types';
 import { createJsonParser, readJson } from './body';
 import { respond } from './respond';
@@ -33,9 +33,9 @@ export function createExpressRouter(
   const jsonParser = createJsonParser({ limit: bodyLimit });
   const router = express.Router();
 
-  const handler: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
+  const handler: RequestHandler = async (req: Request, res: Response, _next: NextFunction) => {
     if (!typeIs(req, 'application/json')) {
-      next();
+      unsupportedMediaType(res);
       return;
     }
     try {
@@ -56,6 +56,17 @@ export function createExpressRouter(
     router.use(express.static(defaultStaticDir));
   }
   return router;
+}
+
+function unsupportedMediaType(res: Response): void {
+  const error: { code: number; message: string; data?: string } = {
+    code: INVALID_REQUEST,
+    message: 'Invalid Request',
+  };
+  if (process.env['NODE_ENV'] !== 'production') {
+    error.data = 'Content-Type must be application/json';
+  }
+  res.status(415).json({ jsonrpc: RPCVersion, id: null, error });
 }
 
 function buildInjectables(
