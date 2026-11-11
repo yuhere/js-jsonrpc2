@@ -169,7 +169,8 @@ empty, with injectables, `s.unknown()`) live in `dev/express.ts` under the
 Pick exactly one transport per server process.
 
 - **Express**: call `app.use('/', createExpressRouter(repository, opts))`.
-  The router only handles `POST /`. Options: `mkInjectable`, `errorTransform`,
+  The router only handles `POST /`. A non-JSON POST returns HTTP 415 and
+  JSON-RPC `-32600`. Options: `mkInjectable`, `errorTransform`,
   `bodyLimit`, `useHtdoc`, `streamFormat`.
 - **WebSocket on existing server**: call `attachWebSocket(server, repository, opts)`.
   Options: `path`, `mkInjectable`, `errorTransform`, `allowOrigin`, `maxPayload`,
