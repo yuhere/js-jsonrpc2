@@ -254,6 +254,8 @@ Default keys differ by transport:
 
 When `mkInjectable` is supplied, it defines the map for that transport. Applications SHOULD expose only the values required by handlers.
 
+`perm_check`, when present, is `PermCheck`: `(grantTo: readonly string[], descriptor: MethodDescriptor, injections: Injections) => boolean | RPCError | Promise<boolean | RPCError>`. The repository calls it with those three arguments. `true` allows the call, an `RPCError` is rethrown, and any other result is permission denied.
+
 ## 9 Response Objects
 
 ### 9.1 Ordinary responses

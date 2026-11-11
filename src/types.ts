@@ -1,6 +1,7 @@
 import { RPCError } from './errors/RPCError';
 import * as s from "./schema/json";
 import type { RPCVersion } from "./schema/z/protocol";
+import type { MethodDescriptor } from "./core/descriptor";
 export type RPCReturnSlot = s.Schema<unknown> | s.VoidMarker | s.StreamMarker<unknown>;
 export type RPCParamSlot = s.Schema<unknown> | s.InjectableMarker;
 export type RPCSignature = [RPCReturnSlot, ...RPCParamSlot[]];
@@ -63,7 +64,16 @@ export type RPCResponse = RPCSuccess | RPCStreamSuccess | RPCFailure;
 
 // ########################################
 
-export type Injections = Record<string, unknown | (() => unknown | Promise<unknown>)>;
+export interface Injections {
+  perm_check?: PermCheck;
+  [key: string]: unknown;
+}
+
+export type PermCheck = (
+  grantTo: readonly string[],
+  descriptor: MethodDescriptor,
+  injections: Injections,
+) => boolean | RPCError | Promise<boolean | RPCError>;
 
 export interface InjectableFactory {
   (options: Record<string, unknown>, repository: Repository): Injections;

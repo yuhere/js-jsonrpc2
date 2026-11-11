@@ -3,6 +3,7 @@ import express from 'express';
 import { attachWebSocket, createRepository, createExpressRouter } from '..';
 import { installDemoMethods } from './demo-methods';
 import type { MethodDescriptor } from "../core/descriptor";
+import type { PermCheck } from "../types";
 
 const app = express();
 const repository = createRepository({ withSystemMethods: true });
@@ -14,12 +15,12 @@ app.use('/', createExpressRouter(repository, {
             request,
             response,
             repository: repository,
-            perm_check: () => {
+            perm_check: (() => {
                 return (grantTo: string[], descriptor: MethodDescriptor): boolean => {
                     console.log("perm_check:", descriptor.namespace, grantTo);
                     return true;
                 }
-            },
+            }) as unknown as PermCheck,
             requestId: `ws-${Math.random().toString(36).slice(2, 8)}`,
         };
         return injections;

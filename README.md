@@ -331,8 +331,8 @@ injection.
 
 ## Permission checks
 
-When a descriptor declares `grantTo`, the injected `perm_check(grantTo,
-descriptor)` is called:
+When a descriptor declares `grantTo`, the injected
+`perm_check(grantTo, descriptor, injections)` is called:
 
 - returns `true` → allowed
 - returns an `RPCError` → re-thrown as-is
@@ -346,7 +346,7 @@ app.use('/', createExpressRouter(repository, {
   mkInjectable: (req, res, repo) => ({
     request: req,
     repository: repo,
-    perm_check: async (grantTo: string[]) => {
+    perm_check: async (grantTo, descriptor, injections) => {
       const roles = (req as any).session?.user?.roles ?? [];
       return roles.some((r: string) => grantTo.includes(r));
     },

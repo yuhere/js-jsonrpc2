@@ -183,7 +183,7 @@ repository.register(
 );
 ```
 
-The exact way to create `currentUser` depends on transport configuration: see `InjectableFactory`, `Injectables`, and transport options below.
+The exact way to create `currentUser` depends on transport configuration: see `InjectableFactory`, `Injections`, and transport options below.
 
 ## Errors and protocol codes
 
@@ -363,10 +363,19 @@ interface RPCFailure {
 }
 
 type RPCResponse = RPCSuccess | RPCStreamSuccess | RPCFailure;
-type Injectables = Record<string, unknown | (() => unknown | Promise<unknown>)>;
+interface Injections {
+  perm_check?: PermCheck;
+  [key: string]: unknown;
+}
+
+type PermCheck = (
+  grantTo: readonly string[],
+  descriptor: MethodDescriptor,
+  injections: Injections,
+) => boolean | RPCError | Promise<boolean | RPCError>;
 
 interface InjectableFactory {
-  (req: unknown, res: unknown, repository: Repository): Injectables;
+  (req: unknown, res: unknown, repository: Repository): Injections;
 }
 
 interface RPCRequestInput {
@@ -377,7 +386,7 @@ interface RPCRequestInput {
 }
 
 interface InvokeOptions {
-  injections?: Injectables;
+  injections?: Injections;
   errorTransform?: RPCErrorTransform | undefined;
 }
 

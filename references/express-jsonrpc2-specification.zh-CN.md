@@ -263,6 +263,8 @@ repository.register(
 
 提供 `mkInjectable` 时，该函数定义对应传输方式使用的映射。应用 **SHOULD** 只向处理函数暴露必要的值。
 
+如果映射中有 `perm_check`，其类型是 `PermCheck`：`(grantTo: readonly string[], descriptor: MethodDescriptor, injections: Injections) => boolean | RPCError | Promise<boolean | RPCError>`。仓库会用这三个参数调用它。返回 `true` 表示允许，返回 `RPCError` 会原样抛出，其它结果视为权限拒绝。
+
 ## 9 响应对象
 
 ### 9.1 普通响应
