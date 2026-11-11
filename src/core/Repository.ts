@@ -53,6 +53,20 @@ function now(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/** JSON-RPC: echo id only when the request object actually carries a string or number. */
+function detectedRequestId(input: unknown): RPCResId {
+  if (!isPlainObject(input)) return null;
+  const id = input['id'];
+  if (typeof id === 'string' || typeof id === 'number') return id;
+  return null;
+}
+
 export class Repository {
   private readonly methods = new Map<string, MethodDescriptor>();
   private readonly metrics: RPCMetrics;
@@ -206,7 +220,10 @@ export class Repository {
         }));
       }
       if (e1 instanceof RPCError) {
-        return this.failure(null, new RPCError(INVALID_REQUEST, 'Invalid Request', e1.message));
+        return this.failure(
+          detectedRequestId(input),
+          new RPCError(INVALID_REQUEST, 'Invalid Request', e1.data),
+        );
       }
       const message = e1 instanceof Error ? e1.message : String(e1);
       if (process.env['NODE_ENV'] !== 'production') {

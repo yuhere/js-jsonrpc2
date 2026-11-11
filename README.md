@@ -9,6 +9,9 @@ A TypeScript JSON-RPC 2.0 server library with schema validation, authorization, 
 - **No named parameters.** `params` must be a positional array (or `null`).
 - **No notifications.** Every request must carry an `id`.
 - **No batch requests.** A batch payload is rejected with `INVALID_REQUEST`.
+- **`params` is required.** Omitting `params` is an `INVALID_REQUEST`. Pass `[]` or `null` when there are none.
+- **No null `id`.** `id` must be a string or a number; `null` is an `INVALID_REQUEST`.
+- **No extra fields.** Unknown members on the request object are rejected with `INVALID_REQUEST`.
 
 ### Extensions
 

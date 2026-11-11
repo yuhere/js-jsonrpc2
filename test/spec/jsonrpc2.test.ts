@@ -38,4 +38,78 @@ describe('JSON-RPC 2.0 specification (protocol)', () => {
     const res = await repository.invoke([{ jsonrpc: '2.0', method: 'sum', params: [1, 2, 4], id: '1' }]);
     expect(res).toMatchObject({ id: null, error: { code: -32600 } });
   });
+
+  it('echoes a string or number id and the schema detail when validation fails', async () => {
+    const repository = buildRepository();
+    const wrongVersion = await repository.invoke({
+      jsonrpc: '1.0',
+      method: 'subtract',
+      params: [1, 2],
+      id: 7,
+    });
+    expect(wrongVersion).toMatchObject({
+      id: 7,
+      error: { code: -32600, message: 'Invalid Request' },
+    });
+    expect(wrongVersion).toHaveProperty('error.data');
+    if ('error' in wrongVersion) {
+      expect(wrongVersion.error.data).toEqual(expect.stringContaining('2.0'));
+      expect(wrongVersion.error.data).not.toBe('Invalid Request');
+    }
+
+    const extra = await repository.invoke({
+      jsonrpc: '2.0',
+      method: 'subtract',
+      params: [1, 2],
+      id: 1,
+      extra: true,
+    });
+    expect(extra).toMatchObject({
+      id: 1,
+      error: { code: -32600, message: 'Invalid Request' },
+    });
+    if ('error' in extra) {
+      expect(extra.error.data).toEqual(expect.stringContaining('extra'));
+    }
+  });
+
+  it('uses a null id when the request id is an object or array', async () => {
+    const repository = buildRepository();
+    const objectId = await repository.invoke({
+      jsonrpc: '2.0',
+      method: 'subtract',
+      params: [1, 2],
+      id: { n: 1 },
+    });
+    const arrayId = await repository.invoke({
+      jsonrpc: '2.0',
+      method: 'subtract',
+      params: [1, 2],
+      id: [1],
+    });
+    expect(objectId).toMatchObject({ id: null, error: { code: -32600 } });
+    expect(arrayId).toMatchObject({ id: null, error: { code: -32600 } });
+  });
+
+  it('omits invalid-request data in production', async () => {
+    const previous = process.env['NODE_ENV'];
+    process.env['NODE_ENV'] = 'production';
+    try {
+      const repository = buildRepository();
+      const res = await repository.invoke({
+        jsonrpc: '1.0',
+        method: 'subtract',
+        params: [1, 2],
+        id: 7,
+      });
+      expect(res).toMatchObject({
+        id: 7,
+        error: { code: -32600, message: 'Invalid Request' },
+      });
+      if ('error' in res) expect(res.error).not.toHaveProperty('data');
+    } finally {
+      if (previous === undefined) delete process.env['NODE_ENV'];
+      else process.env['NODE_ENV'] = previous;
+    }
+  });
 });
