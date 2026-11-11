@@ -12,7 +12,7 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import express from 'express';
 import { createRepository } from '../core/Repository';
 import { installDemoMethods } from './demo-methods';
@@ -21,9 +21,13 @@ import { attachWebSocket } from '../transport/ws';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-function htdocDir(): string {
-    // dist/cli.js → 包根/htdoc
-    return path.resolve(here, '..', 'htdoc');
+/** `src/cli` 和 `dist/cli` 都在包根下两级，htdoc 在包根。 */
+export function resolveHtdocDir(moduleDir: string): string {
+    return path.resolve(moduleDir, '..', '..', 'htdoc');
+}
+
+export function htdocDir(): string {
+    return resolveHtdocDir(here);
 }
 
 function openBrowser(url: string): void {
@@ -144,7 +148,15 @@ async function main(): Promise<void> {
     process.once('SIGTERM', shutdown);
 }
 
-main().catch((err) => {
-    console.error('启动失败：', err);
-    process.exit(1);
-});
+function isDirectCli(): boolean {
+    const entry = process.argv[1];
+    if (entry === undefined) return false;
+    return pathToFileURL(path.resolve(entry)).href === import.meta.url;
+}
+
+if (isDirectCli()) {
+    main().catch((err) => {
+        console.error('启动失败：', err);
+        process.exit(1);
+    });
+}
