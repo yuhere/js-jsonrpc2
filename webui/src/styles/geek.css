@@ -308,6 +308,11 @@ textarea:focus {
     color: var(--syn-string);
 }
 
+.output-line {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .empty {
     color: var(--fg-dim);
     padding: 12px 0;

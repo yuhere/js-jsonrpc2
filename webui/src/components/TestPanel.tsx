@@ -1,9 +1,17 @@
 import { useT } from '../i18n/I18nProvider';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { RPCError, isStreamResult, type RPCClient, type TransportKind, absoluteEndpoint } from '../client';
+import {
+    RPCError,
+    httpCallOptions,
+    isStreamResult,
+    type RPCClient,
+    type TransportKind,
+    absoluteEndpoint,
+} from '../client';
 import type { MethodDetail } from '../hooks/useMethodDetail';
 import { SchemaForm } from './SchemaForm';
 import { sampleFromSchema } from '../api/paramForm';
+import { TestOutput, type OutputHandle } from './TestOutput';
 
 interface TestPanelProps {
     method: string;
@@ -40,7 +48,6 @@ export function TestPanel({
     const isStreamReturn = detail.signature[0]?.kind === 'stream';
 
     const [values, setValues] = useState<unknown[]>([]);
-    const [output, setOutput] = useState('');
     const [elapsed, setElapsed] = useState<{ total: number; firstFrame?: number } | null>(null);
     const [running, setRunning] = useState(false);
     const [copyKind, setCopyKind] = useState<CopyKind>('curl');
@@ -48,13 +55,33 @@ export function TestPanel({
     const [copyError, setCopyError] = useState<string | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
-    const outRef = useRef<HTMLPreElement>(null);
+    const outputRef = useRef<OutputHandle>(null);
+    const runSeq = useRef(0);
+    const activeRun = useRef<{
+        controller: AbortController;
+        generator?: AsyncGenerator<unknown, void, unknown>;
+    } | null>(null);
+    const stopRunRef = useRef<(flush?: boolean) => void>(() => { /* replaced each render */ });
+
+    stopRunRef.current = (flush = false) => {
+        if (flush) outputRef.current?.flush();
+        const current = activeRun.current;
+        if (!current) return;
+        activeRun.current = null;
+        runSeq.current += 1;
+        current.controller.abort();
+        if (current.generator) {
+            void current.generator.return(undefined).catch(() => { /* already closed */ });
+        }
+        setRunning(false);
+    };
 
     useEffect(() => {
-        if (!method) return;
-        setValues(paramSchemas.map(sampleFromSchema));
-        setOutput('');
+        if (method) setValues(paramSchemas.map(sampleFromSchema));
+        outputRef.current?.reset();
         setElapsed(null);
+        setRunning(false);
+        return () => stopRunRef.current();
     }, [method, paramSchemas]);
 
     useEffect(() => {
@@ -83,55 +110,80 @@ export function TestPanel({
         });
     };
 
+    const publish = (text: string, runId: number) => {
+        if (runSeq.current !== runId) return;
+        outputRef.current?.push(text);
+    };
+
     const execute = async () => {
         if (!method) return;
+        stopRunRef.current();
+        const runId = ++runSeq.current;
+        const controller = new AbortController();
+        const run = { controller, generator: undefined as AsyncGenerator<unknown, void, unknown> | undefined };
+        activeRun.current = run;
         setRunning(true);
-        setOutput('');
+        outputRef.current?.reset();
         setElapsed(null);
 
         const startedAt = performance.now();
+        const stillCurrent = () => runSeq.current === runId;
         try {
-            const result = await rpc.call(method, ...values);
+            const args = transport === 'http'
+                ? [...values, httpCallOptions({ signal: controller.signal })]
+                : values;
+            const result = await rpc.call(method, ...args);
 
-            // 首帧/响应到达耗时
+            if (!stillCurrent()) {
+                if (isStreamResult(result)) {
+                    void result.return(undefined).catch(() => { /* already closed */ });
+                }
+                return;
+            }
+
             const firstFrameAt = performance.now() - startedAt;
 
             if (isStreamResult(result)) {
+                run.generator = result;
                 let idx = 0;
-                const lines: string[] = [];
-
-                // 每帧记录到达时间
                 for await (const value of result) {
+                    if (!stillCurrent()) return;
                     const now = performance.now() - startedAt;
-                    lines.push(
+                    publish(
                         `[${idx}] (+${formatElapsed(now)}) ${JSON.stringify(value, null, 2)}`,
+                        runId,
                     );
                     idx++;
-                    setOutput(lines.join('\n'));
                 }
-
+                if (!stillCurrent()) return;
                 const totalAt = performance.now() - startedAt;
-                if (idx === 0) {
-                    lines.push(t('test.streamEndedEmpty', { duration: formatElapsed(totalAt) }));
-                } else {
-                    lines.push(t('test.streamEnded', { count: idx, duration: formatElapsed(totalAt) }));
-                }
-                setOutput(lines.join('\n'));
+                publish(
+                    idx === 0
+                        ? t('test.streamEndedEmpty', { duration: formatElapsed(totalAt) })
+                        : t('test.streamEnded', { count: idx, duration: formatElapsed(totalAt) }),
+                    runId,
+                );
+                outputRef.current?.flush();
                 setElapsed({ total: totalAt, firstFrame: firstFrameAt });
             } else {
                 const totalAt = performance.now() - startedAt;
-                setOutput(JSON.stringify(result, null, 2));
+                for (const line of JSON.stringify(result, null, 2).split('\n')) {
+                    publish(line, runId);
+                }
+                outputRef.current?.flush();
                 setElapsed({ total: totalAt });
             }
         } catch (e) {
+            if (!stillCurrent()) return;
             const totalAt = performance.now() - startedAt;
-            setOutput(formatError(e));
+            for (const line of formatError(e).split('\n')) publish(line, runId);
+            outputRef.current?.flush();
             setElapsed({ total: totalAt });
         } finally {
-            setRunning(false);
-            requestAnimationFrame(() =>
-                outRef.current?.scrollIntoView({ block: 'nearest' }),
-            );
+            if (stillCurrent()) {
+                activeRun.current = null;
+                setRunning(false);
+            }
         }
     };
 
@@ -187,10 +239,13 @@ export function TestPanel({
             />
 
             <div className="actions">
-                <button onClick={execute} disabled={!method || running}>
+                <button onClick={() => void execute()} disabled={!method || running}>
                     {running
                         ? isStreamReturn ? t('test.receiving') : t('test.executing')
                         : isStreamReturn ? t('test.executeStream') : t('test.execute')}
+                </button>
+                <button type="button" onClick={() => stopRunRef.current(true)} disabled={!running}>
+                    {t('test.stop')}
                 </button>
 
                 <div className="split-button" ref={menuRef}>
@@ -235,7 +290,7 @@ export function TestPanel({
                 <button onClick={() => setValues(paramSchemas.map(sampleFromSchema))} disabled={!method}>
                     {t('test.resetToSample')}
                 </button>
-                <button onClick={() => { setOutput(''); setElapsed(null); }} disabled={!output && !elapsed}>
+                <button onClick={() => { outputRef.current?.reset(); setElapsed(null); }} disabled={!method}>
                     {t('test.clearOutput')}
                 </button>
             </div>
@@ -254,9 +309,7 @@ export function TestPanel({
                     </span>
                 )}
             </h3>
-            <pre className="output" ref={outRef}>
-                {output || t('test.notExecuted')}
-            </pre>
+            <TestOutput ref={outputRef} placeholder={t('test.notExecuted')} />
         </section>
     );
 }

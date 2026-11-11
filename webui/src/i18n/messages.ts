@@ -84,6 +84,8 @@ export interface Messages {
         chooseFormat: string;
         streamEnded: string; // "（流已结束，共 {count} 帧，总耗时 {duration}）"
         streamEndedEmpty: string; // "（流已结束，无数据，总耗时 {duration}）"
+        stop: string;
+        outputTruncated: string; // "仅显示最近 {max} 行，更早的 {count} 行已省略。"
         elapsed: string;
         firstFrame: string;
         jsonError: string;
@@ -241,6 +243,8 @@ export const en: Messages = {
         chooseFormat: 'Choose format',
         streamEnded: '(stream ended, {count} frames, total {duration})',
         streamEndedEmpty: '(stream ended, no data, total {duration})',
+        stop: 'Stop',
+        outputTruncated: 'Showing the latest {max} lines. {count} earlier lines hidden.',
         elapsed: 'elapsed',
         firstFrame: 'first frame',
         jsonError: 'JSON error: {error}',
@@ -397,6 +401,8 @@ export const zhCN: Messages = {
         chooseFormat: '选择复制格式',
         streamEnded: '（流已结束，共 {count} 帧，总耗时 {duration}）',
         streamEndedEmpty: '（流已结束，无数据，总耗时 {duration}）',
+        stop: '停止',
+        outputTruncated: '仅显示最近 {max} 行，更早的 {count} 行已省略。',
         elapsed: '耗时',
         firstFrame: '首帧',
         jsonError: 'JSON 错误：{error}',
@@ -553,6 +559,8 @@ export const zhTW: Messages = {
         chooseFormat: '選擇複製格式',
         streamEnded: '（串流已結束，共 {count} 幀，總耗時 {duration}）',
         streamEndedEmpty: '（串流已結束，無資料，總耗時 {duration}）',
+        stop: '停止',
+        outputTruncated: '僅顯示最近 {max} 行，更早的 {count} 行已省略。',
         elapsed: '耗時',
         firstFrame: '首幀',
         jsonError: 'JSON 錯誤：{error}',
@@ -709,6 +717,8 @@ export const ja: Messages = {
         chooseFormat: 'コピー形式を選択',
         streamEnded: '（ストリーム終了、{count} フレーム、合計 {duration}）',
         streamEndedEmpty: '（ストリーム終了、データなし、合計 {duration}）',
+        stop: '停止',
+        outputTruncated: '最新 {max} 行のみ表示。それ以前の {count} 行は省略しました。',
         elapsed: '経過',
         firstFrame: '初回フレーム',
         jsonError: 'JSON エラー：{error}',
