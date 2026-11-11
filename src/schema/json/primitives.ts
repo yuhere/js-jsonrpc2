@@ -135,7 +135,12 @@ export abstract class Schema<T> {
 
   protected abstract _parse(input: unknown, path: string[]): T;
 
-  protected abstract _describe(): SchemaDescription;
+  /**
+   * Built-in schemas return a member of `SchemaDescription`. Custom schemas
+   * may return any `BaseSchemaDescription` (their own `kind` included).
+   * `toJSON()` still exposes the built-in union.
+   */
+  protected abstract _describe(): BaseSchemaDescription;
 
   toJSON(): SchemaDescription {
     const result = this._describe();
@@ -150,7 +155,7 @@ export abstract class Schema<T> {
       result.validate = false;
     }
 
-    return result;
+    return result as SchemaDescription;
   }
 
   protected fail(message: string, path: string[]): never {
