@@ -1,3 +1,5 @@
+> 历史稿，不是当前 API。当前用法以仓库根目录的 README.md 和 SKILL.md 为准。
+
 # JSON-RPC 2.0 Specification for NodeJS
 
   * Goal: Customize the [JSON-RPC 2.0](http://www.jsonrpc.org/specification) protocol for NodeJS's implements  

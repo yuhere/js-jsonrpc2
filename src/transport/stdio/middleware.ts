@@ -48,13 +48,9 @@ function isStreamSuccess(payload: unknown): payload is RPCStreamSuccess {
 }
 
 /**
- * Serve JSON-RPC 2.0 over a pair of newline-delimited JSON (NDJSON) streams.
- *
- * This is useful for IDE/CLI integrations where each request is a single line
- * of JSON on stdin and each response is a single line of JSON on stdout.
- *
- * Resolves when the input stream ends and every response started from it
- * has been written.
+ * Serve JSON-RPC 2.0 over newline-delimited JSON (NDJSON) streams.
+ * Resolves when the input ends and every response has been written.
+ * @example await serveStdio({ repository, framing: 'lines' })
  */
 export async function serveStdio(
   options: StdioOptions = {},

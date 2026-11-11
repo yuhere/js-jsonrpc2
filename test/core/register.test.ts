@@ -79,6 +79,18 @@ describe('Repository.register validation', () => {
         });
         expect(help).toMatchObject({ result: 'async-hello' });
     });
+
+    it('returns an empty string when a method has no document', async () => {
+        const repo = new Repository({ withSystemMethods: true });
+        repo.register({ namespace: 'bare', signature: [s.string()] }, () => 'x');
+        const help = await repo.invoke({
+            jsonrpc: '2.0',
+            method: 'system.methodHelp',
+            params: ['bare'],
+            id: 1,
+        }, { injections: { repository: repo } });
+        expect(help).toMatchObject({ result: '' });
+    });
 });
 
 describe('signatureOf description shape', () => {
@@ -162,6 +174,20 @@ describe('signatureOf description shape', () => {
 });
 
 describe('system.methodSignature integration', () => {
+    it('declares the fields signatureOf actually returns', () => {
+        const repo = new Repository({ withSystemMethods: true });
+        const descriptor = repo.get('system.methodSignature');
+        const [slot] = signatureOf(descriptor!) as Array<{ kind: string; element?: { properties?: Record<string, unknown> } }>;
+        expect(slot?.kind).toBe('array');
+        const properties = slot?.element?.properties ?? {};
+        for (const name of ['kind', 'properties', 'element', 'inner', 'options', 'elements']) {
+            expect(properties).toHaveProperty(name);
+        }
+        const help = descriptor!.document;
+        expect(help).toEqual(expect.stringContaining('properties'));
+        expect(help).toEqual(expect.stringContaining('inner'));
+    });
+
     it('returns stream shape via system.methodSignature', async () => {
         const repo = new Repository({ withSystemMethods: true });
         repo.register(

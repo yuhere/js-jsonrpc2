@@ -2,6 +2,8 @@
 
 A TypeScript JSON-RPC 2.0 server library with schema validation, authorization, dependency injection, and multiple transports.
 
+Agent-oriented constraints and common mistakes are in [SKILL.md](./SKILL.md). A short index is in [llms.txt](./llms.txt).
+
 ## Features
 
 ### Deviations from the JSON-RPC 2.0 spec
@@ -313,10 +315,65 @@ await serveStdio({ repository, framing: 'lines' });
 `framing: 'lines'` reads one JSON value per line; `framing: 'json'` accepts
 concatenated JSON values.
 
+## Streaming returns
+
+Only the return slot can stream. Declare `s.stream(inner)` at `signature[0]`
+and return an async generator. A plain return value is sent as a normal
+`result`. Chunks are not validated against `inner`.
+
+```ts
+repository.register(
+  {
+    namespace: 'logs.tail',
+    document: 'stream log lines',
+    signature: [s.stream(s.string()), s.string()],
+  },
+  async function* tail(path: string) {
+    yield path;
+  },
+);
+```
+
+`Repository.invoke` then returns `RPCStreamSuccess`: `{ jsonrpc, id, chunks }`.
+Each frame is `{ jsonrpc, id, done, index?, value?, error? }`.
+
+## llm.tools
+
+`llm.tools` lists OpenAI-style tools for methods the caller may invoke.
+Parameters are positional and named `param0`, `param1`, … in signature order.
+Injectable slots are skipped. Each parameter description starts with
+`第 N 个位置参数`. Pass `{ format: 'anthropic' }` for
+`{ name, description, input_schema }`. The default format is `openai`.
+
+```ts
+const listed = await repository.invoke(
+  { jsonrpc: '2.0', method: 'llm.tools', params: [{ prefix: 'math.' }], id: 1 },
+  { injections: { repository } },
+);
+// listed.result[0].function.parameters.properties.param0
+```
+
+Code can convert an OpenAI list with `toAnthropicTools(tools)`.
+
+## Web client
+
+Import `@yuhere/js-jsonrpc2/webclient`. `timeout` is a millisecond limit.
+Omit it for no limit. Pass `httpCallOptions({ timeout, signal })` as the last
+`call` argument. A plain object in that position is still a JSON-RPC parameter.
+The timer and the signal both abort an HTTP call, including a streaming body.
+WebSocket calls ignore that options object; do not append it on the `ws` transport.
+
+```ts
+import { createRPC, httpCallOptions } from '@yuhere/js-jsonrpc2/webclient';
+
+const rpc = createRPC({ transport: 'http', endpoint: '/rpc', timeout: 10_000 });
+await rpc.call('add', 1, 2, httpCallOptions({ timeout: 500, signal }));
+```
+
 ## Invoking directly
 
 `Repository.invoke(input, options?)` returns an `RPCResponse`
-(`RPCSuccess | RPCFailure`). Useful for tests or custom transports.
+(`RPCSuccess | RPCStreamSuccess | RPCFailure`). Useful for tests or custom transports.
 
 ```ts
 const response = await repository.invoke(
@@ -367,11 +424,13 @@ zero arguments the way a signature `s.injectable()` value is.
 app.use('/', createExpressRouter(repository, {
   mkInjectable: ({ request, session }) => ({
     request,
-    perm_check: async (grantTo: string[]) => {
+    perm_check: async (grantTo, descriptor, injections) => {
       const roles =
         (session as { user?: { roles?: string[] } } | undefined)?.user?.roles ??
         [];
-      return roles.some((role) => grantTo.includes(role));
+      const allowed = roles.some((role) => grantTo.includes(role));
+      console.log(descriptor.namespace, injections.request);
+      return allowed;
     },
   }),
 }));
@@ -392,6 +451,17 @@ createExpressRouter(repository, {
       : undefined,
 });
 ```
+
+## Common mistakes
+
+- `params` must be an array or `null`. A bare object is `INVALID_PARAMS`.
+- Every request needs a string or number `id`. There is no notification or batch support.
+- The descriptor fields are `signature` and `document`, not `sign` or `doc`.
+- `s.injectable()` cannot be `signature[0]`.
+- `perm_check` is called as `(grantTo, descriptor, injections)`. A zero-argument function that returns the real checker is denied, not unwrapped.
+- `errorTransform` does not see validation errors.
+- `s.stream(inner)` streams only when the handler returns an async iterable. `inner` is not applied to each chunk.
+- More traps, including stream frames and the web client, are in [SKILL.md](./SKILL.md).
 
 ## Built-in methods
 

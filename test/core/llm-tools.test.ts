@@ -4,9 +4,11 @@ import { Repository } from '../../src/core/Repository';
 import {
     decodeMethodName,
     encodeMethodName,
+    toAnthropicTools,
 } from '../../src/core/llm-tools';
 import { s } from '../../src/schema/json';
 import { INVALID_PARAMS } from '../../src/errors/codes';
+import { RPCError } from '../../src/errors/RPCError';
 
 describe('llm.tools JSON Schema conversion', () => {
     it('maps s.null() to type "null"', async () => {
@@ -17,7 +19,8 @@ describe('llm.tools JSON Schema conversion', () => {
         );
         const tools = await repo.listLlmTools({});
         const param = tools[0]!.function.parameters as any;
-        expect(param.properties.param0).toEqual({ type: 'null' });
+        expect(param.properties.param0).toMatchObject({ type: 'null' });
+        expect(param.properties.param0.description).toContain('第 1 个位置参数');
     });
 
     it('maps s.string().nullable() to type ["string","null"]', async () => {
@@ -108,11 +111,14 @@ describe('llm.tools JSON Schema conversion', () => {
             type: 'array',
             minItems: 2,
             maxItems: 2,
-            items: [{ type: 'string' }, { type: 'number' }],
+            prefixItems: [{ type: 'string' }, { type: 'number' }],
+            items: false,
         });
+        expect(props.param0.description).toContain('第 1 个位置参数');
+        expect(props.param1.description).toContain('第 2 个位置参数');
         expect(props.param1.anyOf).toEqual([
-            { const: 'a', type: 'string' },
-            { const: 'b', type: 'string' },
+            { const: 'a', enum: ['a'], type: 'string' },
+            { const: 'b', enum: ['b'], type: 'string' },
         ]);
     });
 
@@ -211,5 +217,52 @@ describe('llm.tools names and options', () => {
 
         const prefixed = repoWith(['a'.repeat(60)]);
         await expect(prefixed.listLlmTools({}, { namePrefix: 'prefix_' })).rejects.toThrow(/prefix_/);
+    });
+
+    it('returns Anthropic tools when format is anthropic', async () => {
+        const repo = repoWith(['math.add']);
+        const tools = await repo.listLlmTools({}, { format: 'anthropic' });
+        expect(tools).toEqual(toAnthropicTools(await repo.listLlmTools({})));
+        expect(tools[0]).toMatchObject({
+            name: 'math__add',
+            input_schema: { type: 'object', additionalProperties: false },
+        });
+        expect(tools[0]).not.toHaveProperty('function');
+    });
+});
+
+describe('invokeLlmTool errors', () => {
+    it('keeps code, message, and data when a parameter is invalid', async () => {
+        const repo = new Repository({ withSystemMethods: false });
+        repo.register(
+            { namespace: 'need', signature: [s.string(), s.string().min(2)] },
+            (value: string) => value,
+        );
+        const error = await repo.invokeLlmTool(
+            { name: 'need', arguments: { param0: 'x' } },
+            {},
+        ).then(() => { throw new Error('expected rejection'); }, (err: unknown) => err);
+        expect(error).toBeInstanceOf(RPCError);
+        const rpc = error as RPCError;
+        expect(rpc.code).toBe(INVALID_PARAMS);
+        expect(typeof rpc.data).toBe('string');
+        expect(rpc.message).toContain(String(rpc.data));
+    });
+
+    it('reports a missing paramN with the same error shape', async () => {
+        const repo = new Repository({ withSystemMethods: false });
+        repo.register(
+            { namespace: 'need', signature: [s.string(), s.string(), s.string()] },
+            () => 'ok',
+        );
+        const error = await repo.invokeLlmTool(
+            { name: 'need', arguments: { param1: 'b' } },
+            {},
+        ).then(() => { throw new Error('expected rejection'); }, (err: unknown) => err);
+        expect(error).toBeInstanceOf(RPCError);
+        const rpc = error as RPCError;
+        expect(rpc.code).toBe(INVALID_PARAMS);
+        expect(rpc.data).toBe('Missing tool argument `param0`.');
+        expect(rpc.message).toContain('Missing tool argument `param0`.');
     });
 });

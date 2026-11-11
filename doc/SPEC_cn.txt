@@ -1,3 +1,5 @@
+历史稿，不是当前 API。当前用法以仓库根目录的 README.md 和 SKILL.md 为准。
+
 JSON-RPC 2.0规范
 
 起草日期：

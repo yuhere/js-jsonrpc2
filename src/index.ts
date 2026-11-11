@@ -7,7 +7,17 @@ export { Repository, createRepository };
 export { RPCError };
 export { codes };
 export { s };
+export type {
+  Infer,
+  Schema,
+  SchemaDescription,
+  JSONValue,
+  JSONPrimitive,
+  ObjectOutput,
+  BaseSchemaDescription,
+} from './schema/json';
 export * from './types';
+export { toAnthropicTools, type AnthropicTool, type LlmToolFormat } from './core/llm-tools';
 
 // ################
 import { createExpressRouter } from './transport/express';

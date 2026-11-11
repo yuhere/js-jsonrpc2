@@ -69,6 +69,11 @@ export interface Injections {
   [key: string]: unknown;
 }
 
+/**
+ * Permission callback. Return `true` to allow, an `RPCError` to rethrow it,
+ * or anything else to deny. It is not called with zero arguments.
+ * @example perm_check: (grantTo, descriptor, injections) => grantTo.includes('admin')
+ */
 export type PermCheck = (
   grantTo: readonly string[],
   descriptor: MethodDescriptor,

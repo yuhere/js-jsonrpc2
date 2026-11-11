@@ -49,8 +49,8 @@ function isStreamSuccess(payload: unknown): payload is RPCStreamSuccess {
 
 /**
  * Attach a JSON-RPC 2.0 WebSocket endpoint to an existing `http.Server`.
- *
  * Returns the underlying `WebSocketServer` so the caller can close it.
+ * @example attachWebSocket(server, repository, { path: '/' })
  */
 export function attachWebSocket(
     server: Server,

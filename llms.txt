@@ -1,0 +1,18 @@
+# @yuhere/js-jsonrpc2
+
+Index for coding agents. Read these, in order:
+
+- AGENTS.md — hard constraints
+- SKILL.md — how to register methods, transports, streams, permissions, and common mistakes
+- README.md — install, schemas, Express / WebSocket / stdio, llm.tools, web client
+
+README sections:
+
+- Deviations from JSON-RPC 2.0
+- Schemas, including object strictness and nullable
+- Streaming returns
+- llm.tools (param0, param1, … and format)
+- Web client (timeout, httpCallOptions, AbortSignal)
+- Permission checks
+- Common mistakes
+- Error codes
