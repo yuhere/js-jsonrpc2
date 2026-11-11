@@ -568,19 +568,19 @@ export function installDemoMethods(repository: Repository): void {
         },
     );
 
-    // 13.6 声明 stream 却返回非 generator：验证 INTERNAL_ERROR
-    //   注意：这个 handler 故意写错，用于测试服务端校验。
+    // 13.6 声明 stream 却返回非 AsyncIterable：按普通 result 返回。
+    //   只有签名是 s.stream 且返回值真是 AsyncIterable 时才走流。
     repository.register(
         {
             namespace: 'stream.misdeclared',
             document:
-                '声明了 s.stream(...) 但 handler 返回普通值。预期 INVOKE 返回 INTERNAL_ERROR。',
+                '声明了 s.stream(...) 但 handler 返回普通值。只有方法声明 s.stream 且调用实际返回 AsyncIterable 时才按流处理；否则该普通值放在 result 里返回。',
             grantTo: ["a"],
             signature: [
                 s.stream(s.string().describe('字符串流')),
             ],
         },
-        // 故意返回非 AsyncGenerator
+        // 故意返回非 AsyncIterable，因此响应是普通 result
         () => 'not a stream',
     );
 
