@@ -1034,3 +1034,67 @@ describe("Schema.validate()", () => {
         expect(schema.parse("short")).toBe("short");
     });
 });
+
+describe("nested validation messages", () => {
+    function expectFailure(
+        parse: () => unknown,
+        path: string[],
+        message: string,
+        detail: string,
+    ) {
+        try {
+            parse();
+            expect.fail("should throw");
+        } catch (error) {
+            expect(error).toBeInstanceOf(SchemaValidationError);
+            const failure = error as SchemaValidationError;
+            expect(failure.path).toEqual(path);
+            expect(failure.message).toBe(message);
+            expect(failure.detail).toBe(detail);
+        }
+    }
+
+    it("prefixes an object path once", () => {
+        const schema = s.object({
+            a: s.object({
+                b: s.object({ c: s.string() }),
+            }),
+        });
+        expectFailure(
+            () => schema.parse({ a: { b: { c: 1 } } }),
+            ["a", "b", "c"],
+            "a.b.c: Expected a string",
+            "Expected a string",
+        );
+    });
+
+    it("prefixes an array path once", () => {
+        const schema = s.array(s.array(s.string()));
+        expectFailure(
+            () => schema.parse([[1]]),
+            ["0", "0"],
+            "0.0: Expected a string",
+            "Expected a string",
+        );
+    });
+
+    it("prefixes a record path once", () => {
+        const schema = s.record(s.object({ name: s.string() }));
+        expectFailure(
+            () => schema.parse({ user: { name: 1 } }),
+            ["user", "name"],
+            "user.name: Expected a string",
+            "Expected a string",
+        );
+    });
+
+    it("prefixes a tuple path once", () => {
+        const schema = s.tuple([s.object({ name: s.string() })]);
+        expectFailure(
+            () => schema.parse([{ name: 1 }]),
+            ["0", "name"],
+            "0.name: Expected a string",
+            "Expected a string",
+        );
+    });
+});
