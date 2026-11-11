@@ -65,7 +65,7 @@ export interface TupleSchemaDescription extends BaseSchemaDescription {
 
 export interface StreamSchemaDescription extends BaseSchemaDescription {
   kind: 'stream';
-  inner?: SchemaDescription;
+  inner: SchemaDescription;
 }
 
 export type SchemaDescription =
