@@ -106,7 +106,13 @@ export function registerSystemMethods(repository: Repository): void {
         'Injectable parameters are omitted (they are provided by the server).\n' +
         'Streaming methods are excluded by default; pass `{ includeStreaming: true }` to include them\n' +
         '(their description will note that they return a stream).\n\n' +
-        'Optional params: `{ includeStreaming?: boolean, namePrefix?: string, prefix?: string }`.',
+        'Tool names encode the JSON-RPC method name, which is otherwise unchanged:\n' +
+        'each "_" becomes "_x", then each "." becomes "__".\n' +
+        'Decode by restoring "__" to "." first, then "_x" to "_".\n' +
+        '`namePrefix` is prepended to that encoding. `prefix` only keeps methods whose namespace starts with it.\n' +
+        'The generated name must match /^[a-zA-Z0-9_-]{1,64}$/.\n\n' +
+        'Optional params: `{ includeStreaming?: boolean, namePrefix?: string, prefix?: string }`.\n' +
+        'Every field may be omitted. `null` uses the defaults.',
       signature: [
         s.array(
           s.object({
@@ -124,9 +130,9 @@ export function registerSystemMethods(repository: Repository): void {
         s.injectable('injections'),
         s.object({
           includeStreaming: s.boolean().describe('Include stream-returning methods (default false)'),
-          namePrefix: s.string().describe('Prefix added to every tool name'),
+          namePrefix: s.string().describe('Prefix added to every encoded tool name'),
           prefix: s.string().describe('Only include methods whose namespace starts with this'),
-        }).strict().describe('Options').nullable()
+        }).optionalProperties(['includeStreaming', 'namePrefix', 'prefix']).describe('Options').nullable()
       ],
     },
     async function generateLlmTools(repository: Repository, injections: Injections, rawOptions?: unknown): Promise<LlmTools> {
