@@ -408,6 +408,110 @@ describe("ObjectSchema", () => {
 
 });
 
+describe("JSON prototype keys", () => {
+    function asObject<T>(value: T | null): T & object {
+        if (value === null || typeof value !== "object") {
+            throw new Error("expected an object");
+        }
+        return value;
+    }
+
+    function expectOwnData(
+        object: object,
+        key: string,
+        value: unknown,
+    ): void {
+        expect(Object.getPrototypeOf(object)).toBe(Object.prototype);
+        expect(Object.prototype.hasOwnProperty.call(object, key)).toBe(true);
+        expect(Object.getOwnPropertyDescriptor(object, key)).toMatchObject({
+            value,
+            writable: true,
+            enumerable: true,
+            configurable: true,
+        });
+        expect("admin" in object).toBe(false);
+        expect(
+            Object.prototype.hasOwnProperty.call(Object.prototype, "admin"),
+        ).toBe(false);
+    }
+
+    it("stores a record __proto__ key from JSON.parse as an own property", () => {
+        const parsed = asObject(
+            s.record(s.unknown()).parse(
+                JSON.parse('{"__proto__":{"admin":true},"ok":1}'),
+            ),
+        );
+
+        expectOwnData(parsed, "__proto__", { admin: true });
+        expect(parsed.ok).toBe(1);
+        expect(Object.keys(parsed).sort()).toEqual(["__proto__", "ok"]);
+    });
+
+    it("stores an allowUnknownProperties __proto__ key from JSON.parse as an own property", () => {
+        const parsed = asObject(
+            s
+                .object({ name: s.string() })
+                .allowUnknownProperties(true)
+                .parse(JSON.parse('{"name":"Ada","__proto__":{"admin":true}}')),
+        );
+
+        expect(parsed.name).toBe("Ada");
+        expectOwnData(parsed, "__proto__", { admin: true });
+    });
+
+    it("stores nested __proto__ keys from JSON.parse as own properties", () => {
+        const parsed = asObject(
+            s
+                .object({
+                    user: s
+                        .object({ name: s.string() })
+                        .allowUnknownProperties(true),
+                    bag: s.record(s.unknown()),
+                })
+                .parse(
+                    JSON.parse(
+                        '{"user":{"name":"Ada","__proto__":{"admin":true}},"bag":{"__proto__":{"role":"admin"},"n":1}}',
+                    ),
+                ),
+        );
+
+        const user = asObject(parsed.user as { name?: string } | null);
+        const bag = asObject(parsed.bag as { n?: number } | null);
+        expect(user.name).toBe("Ada");
+        expectOwnData(user, "__proto__", { admin: true });
+        expect(bag.n).toBe(1);
+        expectOwnData(bag, "__proto__", { role: "admin" });
+        expect("admin" in parsed).toBe(false);
+    });
+
+    it("stores a declared __proto__ property as an own property", () => {
+        const parsed = asObject(
+            s
+                .object({
+                    name: s.string(),
+                    ["__proto__"]: s.object({ admin: s.boolean() }),
+                })
+                .parse(JSON.parse('{"name":"Ada","__proto__":{"admin":true}}')),
+        );
+
+        expect(parsed.name).toBe("Ada");
+        expectOwnData(parsed, "__proto__", { admin: true });
+    });
+
+    it("keeps constructor and prototype keys as own data properties", () => {
+        const parsed = asObject(
+            s.record(s.unknown()).parse(
+                JSON.parse(
+                    '{"constructor":{"prototype":{"admin":true}},"prototype":{"admin":true}}',
+                ),
+            ),
+        );
+
+        expectOwnData(parsed, "constructor", { prototype: { admin: true } });
+        expectOwnData(parsed, "prototype", { admin: true });
+    });
+});
+
 describe("RecordSchema", () => {
     it("validates all values using the value schema", () => {
         const schema = s.record(s.number());
