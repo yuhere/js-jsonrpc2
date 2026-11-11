@@ -59,13 +59,21 @@ export type SchemaDescription =
   | TupleSchemaDescription;
 
 export class SchemaValidationError extends Error {
+  /** 未拼接路径前缀的原文。外层包装时用它，不要用已经格式化过的 `message`。 */
+  readonly detail: string;
+
   constructor(
     message: string,
     public readonly path: string[] = [],
   ) {
     super(path.length > 0 ? `${path.join(".")}: ${message}` : message);
     this.name = "SchemaValidationError";
+    this.detail = message;
   }
+}
+
+function rethrowAt(error: SchemaValidationError, key: string): never {
+  throw new SchemaValidationError(error.detail, [key, ...error.path]);
 }
 
 /**
@@ -411,10 +419,7 @@ export class ArraySchema<T> extends NullableSchema<T[]> {
         return this.itemSchema.parse(item);
       } catch (error) {
         if (error instanceof SchemaValidationError) {
-          throw new SchemaValidationError(error.message, [
-            String(index),
-            ...error.path,
-          ]);
+          rethrowAt(error, String(index));
         }
 
         throw error;
@@ -517,10 +522,7 @@ export class ObjectSchema<S extends ObjectShape> extends NullableSchema<ObjectOu
         assignJsonKey(output, key, schema.parse(source[key]));
       } catch (error) {
         if (error instanceof SchemaValidationError) {
-          throw new SchemaValidationError(error.message, [
-            key,
-            ...error.path,
-          ]);
+          rethrowAt(error, key);
         }
 
         throw error;
@@ -602,10 +604,7 @@ export class RecordSchema<T> extends NullableSchema<Record<string, T>> {
         assignJsonKey(output, key, this.valueSchema.parse(value));
       } catch (error) {
         if (error instanceof SchemaValidationError) {
-          throw new SchemaValidationError(error.message, [
-            key,
-            ...error.path,
-          ]);
+          rethrowAt(error, key);
         }
 
         throw error;
@@ -715,10 +714,7 @@ export class TupleSchema<
         result.push(schema.parse(input[i]) as SchemaValue<S[number]>);
       } catch (error) {
         if (error instanceof SchemaValidationError) {
-          throw new SchemaValidationError(error.message, [
-            String(i),
-            ...error.path,
-          ]);
+          rethrowAt(error, String(i));
         }
         throw error;
       }
