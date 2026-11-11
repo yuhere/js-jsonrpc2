@@ -306,12 +306,8 @@ export async function* stringifyStream(
             value != null &&
             typeof (value as any)[Symbol.iterator] === 'function';
 
-        const isIteratorLike =
-            value != null &&
-            typeof (value as any).next === 'function';
-
         const shouldTreatAsIterable =
-            (hasAsyncIterator || hasIterator || isIteratorLike) &&
+            (hasAsyncIterator || hasIterator) &&
             !(value instanceof Map) &&
             !(value instanceof Set) &&
             !(value instanceof WeakMap) &&
@@ -324,10 +320,8 @@ export async function* stringifyStream(
             let completed = false;
             if (hasAsyncIterator) {
                 iterator = (value as AsyncIterable<unknown>)[Symbol.asyncIterator]();
-            } else if (hasIterator) {
-                iterator = (value as Iterable<unknown>)[Symbol.iterator]();
             } else {
-                iterator = value as Iterator<unknown>;
+                iterator = (value as Iterable<unknown>)[Symbol.iterator]();
             }
 
             try {

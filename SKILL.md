@@ -169,7 +169,8 @@ empty, with injectables, `s.unknown()`) live in `dev/express.ts` under the
 Pick exactly one transport per server process.
 
 - **Express**: call `app.use('/', createExpressRouter(repository, opts))`.
-  The router only handles `POST /`. Options: `mkInjectable`, `errorTransform`,
+  The router only handles `POST /`. A non-JSON POST returns HTTP 415 and
+  JSON-RPC `-32600`. Options: `mkInjectable`, `errorTransform`,
   `bodyLimit`, `useHtdoc`, `streamFormat`.
 - **WebSocket on existing server**: call `attachWebSocket(server, repository, opts)`.
   Options: `path`, `mkInjectable`, `errorTransform`, `allowOrigin`, `maxPayload`,
@@ -191,15 +192,19 @@ All transports support stream returns.
   sending a truncated body with `200 OK`; if it fails before writing any byte,
   the transport emits an `INTERNAL_ERROR` response instead.
 
-Supply `mkInjectable` when the handler needs request/socket context. Defaults:
+Supply `mkInjectable` when the handler needs request/socket context. Call it
+as `(context, repository) => injections`, not as `(req, res, repo)`.
 
-| Transport | Default injectables |
-| --- | --- |
-| Express | `request`, `session`, `response`, `repository` |
-| WebSocket | `socket`, `request`, `repository` |
-| stdio | `repository`, `input`, `output` |
+| Transport | `context` | Defaults when omitted |
+| --- | --- | --- |
+| Express | `{ request, session, response }` | `request`, `session`, `response`, `repository` |
+| WebSocket | `{ socket, request }` | `socket`, `request`, `repository` |
+| stdio | `{ input, output }` | `repository`, `input`, `output` |
 
-Injectable values may be plain values or functions; functions are awaited.
+The transport then sets `repository` and adds `injections` (the map itself).
+A factory replaces the other defaults, so return any default key the handler
+still reads. Values may be plain values or zero-argument functions; functions
+are awaited.
 
 ## Enforce permissions
 

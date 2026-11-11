@@ -52,7 +52,61 @@ describe('express integration', () => {
     it('reports parse errors', async () => {
         const { app } = buildApp();
         const res = await rpc(app, '{"jsonrpc": "2.0", "method": "foobar, "params": "bar", "baz]');
+        expect(res.status).toBe(200);
         expect(res.body).toMatchObject({ id: null, error: { code: -32700, message: 'Parse error' } });
+    });
+
+    it('returns 415 for a POST that is not JSON', async () => {
+        const { app } = buildApp();
+        const cases = await Promise.all([
+            request(app).post('/').set('Content-Type', 'text/plain').send('hi'),
+            request(app).post('/').unset('Content-Type').send('hi'),
+            request(app).post('/').set('Content-Type', 'application/x-www-form-urlencoded').send('a=1'),
+        ]);
+        for (const res of cases) {
+            expect(res.status).toBe(415);
+            expect(res.headers['content-type']).toMatch(/application\/json/);
+            expect(res.body).toEqual({
+                jsonrpc: '2.0',
+                id: null,
+                error: {
+                    code: -32600,
+                    message: 'Invalid Request',
+                    data: 'Content-Type must be application/json',
+                },
+            });
+        }
+    });
+
+    it('accepts application/json with a charset', async () => {
+        const { app } = buildApp();
+        const res = await request(app)
+            .post('/')
+            .set('Content-Type', 'application/json; charset=utf-8')
+            .send(JSON.stringify({ jsonrpc: '2.0', method: 'subtract', params: [4, 1], id: 1 }));
+        expect(res.status).toBe(200);
+        expect(res.body.result).toBe(3);
+    });
+
+    it('does not turn GET into a JSON-RPC media-type error', async () => {
+        const { app } = buildApp();
+        const res = await request(app).get('/');
+        expect(res.status).not.toBe(415);
+    });
+
+    it('omits media-type error data in production', async () => {
+        const previous = process.env['NODE_ENV'];
+        process.env['NODE_ENV'] = 'production';
+        try {
+            const { app } = buildApp();
+            const res = await request(app).post('/').set('Content-Type', 'text/plain').send('hi');
+            expect(res.status).toBe(415);
+            expect(res.body.error).toEqual({ code: -32600, message: 'Invalid Request' });
+            expect(res.body.error).not.toHaveProperty('data');
+        } finally {
+            if (previous === undefined) delete process.env['NODE_ENV'];
+            else process.env['NODE_ENV'] = previous;
+        }
     });
 
     it('applies permission via perm_check', async () => {

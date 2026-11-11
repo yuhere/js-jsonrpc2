@@ -253,15 +253,21 @@ repository.register(
 );
 ```
 
-注入映射使用 `Injectables` 表示，它是一个记录类型，值可以是直接值，也可以是同步或异步返回值的函数。`InjectableFactory` 接收传输上下文和仓库，并返回该映射。
+注入映射使用 `Injections` 表示，它是一个记录类型，值可以是直接值，也可以是同步或异步返回值的函数。`InjectableFactory` 的调用形式是 `mkInjectable(context, repository)`。
 
-各传输方式的默认键不同：
+`context` 随传输方式变化：
+
+- Express：`{ request, session, response }`。
+- WebSocket：`{ socket, request }`。
+- stdio：`{ input, output }`。
+
+省略 `mkInjectable` 时，默认映射为：
 
 - Express：`request`、`session`、`response`、`repository`。
 - WebSocket：`socket`、`request`、`repository`。
 - stdio：`repository`、`input`、`output`。
 
-提供 `mkInjectable` 时，该函数定义对应传输方式使用的映射。应用 **SHOULD** 只向处理函数暴露必要的值。
+提供 `mkInjectable` 时，返回值会替换上述默认键，但传输层始终把 `repository` 设为当前仓库，并额外加入指向该映射自身的 `injections`。应用 **SHOULD** 只返回处理函数需要的值。
 
 如果映射中有 `perm_check`，其类型是 `PermCheck`：`(grantTo: readonly string[], descriptor: MethodDescriptor, injections: Injections) => boolean | RPCError | Promise<boolean | RPCError>`。仓库会用这三个参数调用它，不会像签名里的 injectable 那样做无参求值。返回 `true` 表示允许，返回 `RPCError` 会原样抛出，其它结果视为权限拒绝。
 
@@ -445,7 +451,7 @@ serveStdio(options?: StdioOptions): Promise<void>
 
 在 `"lines"` 模式下，每个非空行都会被解析为一个 JSON 值。在 `"json"` 模式下，实现会提取由可选空白字符分隔的连续 JSON 值。输出写入会被串行化，以避免响应字节相互交错。当输入结束且所有待处理写入完成时，返回的 Promise 会完成。
 
-stdio 的 `mkInjectable` 回调不会收到 HTTP request/response 对象；对应参数为 `undefined`。默认映射提供 `repository`、`input` 和 `output`。
+stdio 的调用形式是 `mkInjectable({ input, output }, repository)`。`input` 和 `output` 是配置的流（默认分别是 `process.stdin` 和 `process.stdout`），没有 HTTP request/response 参数。省略工厂时，默认映射提供 `repository`、`input` 和 `output`。
 
 ## 15 内置系统方法
 

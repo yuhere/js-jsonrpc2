@@ -73,7 +73,7 @@ export function attachWebSocket(
         // Strip query string before matching.
         const pathname = url.split('?', 1)[0] ?? '/';
         if (pathname !== path) {
-            socket.destroy();
+            // 不匹配的升级留给同一 Server 上的其他监听器。
             return;
         }
 

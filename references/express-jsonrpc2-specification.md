@@ -244,15 +244,21 @@ repository.register(
 );
 ```
 
-The injectable map is represented by `Injectables`, a record whose values may be direct values or functions returning values synchronously or asynchronously. `InjectableFactory` receives transport context and the repository and returns this map.
+The injectable map is represented by `Injections`, a record whose values may be direct values or functions returning values synchronously or asynchronously. `InjectableFactory` is called as `mkInjectable(context, repository)`.
 
-Default keys differ by transport:
+`context` depends on the transport:
+
+- Express: `{ request, session, response }`.
+- WebSocket: `{ socket, request }`.
+- stdio: `{ input, output }`.
+
+When `mkInjectable` is omitted, the default map is:
 
 - Express: `request`, `session`, `response`, `repository`.
 - WebSocket: `socket`, `request`, `repository`.
 - stdio: `repository`, `input`, `output`.
 
-When `mkInjectable` is supplied, it defines the map for that transport. Applications SHOULD expose only the values required by handlers.
+When `mkInjectable` is supplied, its return value replaces those defaults except `repository`, which the transport always sets to the server repository. It also adds `injections`, the map itself. Applications SHOULD return only the values required by handlers.
 
 `perm_check`, when present, is `PermCheck`: `(grantTo: readonly string[], descriptor: MethodDescriptor, injections: Injections) => boolean | RPCError | Promise<boolean | RPCError>`. The repository calls it with those three arguments. It is not evaluated with zero arguments the way a signature injectable is. `true` allows the call, an `RPCError` is rethrown, and any other result is permission denied.
 
@@ -436,7 +442,7 @@ Options:
 
 In `"lines"` mode, each non-empty line is parsed as one JSON value. In `"json"` mode, the implementation extracts concatenated JSON values separated by optional whitespace. Output writes are serialized to prevent response bytes from interleaving. The returned promise resolves when input ends and outstanding writes complete.
 
-The `mkInjectable` callback is invoked without HTTP request/response objects for stdio; those arguments are `undefined`. The default map provides `repository`, `input`, and `output`.
+For stdio, `mkInjectable` is called as `mkInjectable({ input, output }, repository)`. `input` and `output` are the configured streams (`process.stdin` and `process.stdout` by default). There is no HTTP request or response argument. When the factory is omitted, the default map provides `repository`, `input`, and `output`.
 
 ## 15 Built-in System Methods
 

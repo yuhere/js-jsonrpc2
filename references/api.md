@@ -233,7 +233,7 @@ interface ExpressOptions {
 }
 ```
 
-- `mkInjectable(req, res, repository)` returns a map of server-side injectable values.
+- `mkInjectable(context, repository)` returns a map of server-side injectable values. For Express, `context` is `{ request, session, response }`. The transport then sets `repository` on that map.
 - `errorTransform` maps unhandled errors to `RPCError`.
 - `bodyLimit` controls the JSON body size; source default is `'1mb'`.
 - `useHtdoc` enables/disables the bundled documentation UI. Source default is `process.env.NODE_ENV !== 'production'`.
@@ -244,7 +244,7 @@ Example:
 const app = express();
 app.use("/rpc", createExpressRouter(repository, {
   bodyLimit: "1mb",
-  mkInjectable: (req, res) => ({ request: req, response: res }),
+  mkInjectable: ({ request, response }) => ({ request, response }),
 }));
 ```
 
@@ -363,19 +363,10 @@ interface RPCFailure {
 }
 
 type RPCResponse = RPCSuccess | RPCStreamSuccess | RPCFailure;
-interface Injections {
-  perm_check?: PermCheck;
-  [key: string]: unknown;
-}
-
-type PermCheck = (
-  grantTo: readonly string[],
-  descriptor: MethodDescriptor,
-  injections: Injections,
-) => boolean | RPCError | Promise<boolean | RPCError>;
+type Injections = Record<string, unknown | (() => unknown | Promise<unknown>)>;
 
 interface InjectableFactory {
-  (req: unknown, res: unknown, repository: Repository): Injections;
+  (context: Record<string, unknown>, repository: Repository): Injections;
 }
 
 interface RPCRequestInput {

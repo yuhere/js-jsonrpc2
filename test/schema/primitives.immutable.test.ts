@@ -174,7 +174,8 @@ describe("immutable schema modifiers", () => {
   });
 });
 
-// Compile-time sanity check: strict() returns ObjectSchema<S> (no extra Strict type parameter).
+// strict() stays an ObjectSchema. Optional-key and unknown-prop parameters default
+// back to "all required, no extra keys".
 const strictTypeCheck: ObjectSchema<{ name: StringSchema }> =
   s.object({ name: s.string() }).strict();
 void strictTypeCheck;
