@@ -256,7 +256,11 @@ import { createExpressRouter } from '@yuhere/js-jsonrpc2';
 app.use('/', createExpressRouter(repository, {
   bodyLimit: '1mb',
   useHtdoc: true,
-  mkInjectable: (req, res, repo) => ({ request: req, response: res, repository: repo }),
+  mkInjectable: ({ request, response }, repository) => ({
+    request,
+    response,
+    repository,
+  }),
   errorTransform: (error) => /* return RPCError | undefined */ undefined,
 }));
 ```
@@ -275,7 +279,11 @@ import { attachWebSocket } from '@yuhere/js-jsonrpc2';
 const server = createServer(app);
 attachWebSocket(server, repository, {
   path: '/',
-  mkInjectable: (ws, req, repo) => ({ socket: ws, request: req, repository: repo }),
+  mkInjectable: ({ socket, request }, repository) => ({
+    socket,
+    request,
+    repository,
+  }),
 });
 server.listen(5000);
 ```
@@ -316,18 +324,26 @@ const response = await repository.invoke(
 
 ## Injectables
 
-An injectable factory is passed to the transport as `mkInjectable`. The
-resulting object is available to any signature slot declared as
-`s.injectable(key)`. Built-in defaults:
+`mkInjectable` has this signature:
 
-| Transport | Default injectables |
-| --- | --- |
-| Express | `request`, `session`, `response`, `repository` |
-| WebSocket | `socket`, `request`, `repository` |
-| stdio | `repository`, `input`, `output` |
+```ts
+(context, repository) => injections
+```
 
-Values may be plain values or functions; functions are awaited before
-injection.
+`repository` is the server `Repository`. `context` depends on the transport:
+
+| Transport | `context` | Defaults when `mkInjectable` is omitted |
+| --- | --- | --- |
+| Express | `{ request, session, response }` | `request`, `session`, `response`, `repository` |
+| WebSocket | `{ socket, request }` | `socket`, `request`, `repository` |
+| stdio | `{ input, output }` | `repository`, `input`, `output` |
+
+The transport calls the factory, then sets `repository` on the returned map
+and adds `injections` pointing at that map. A factory replaces the other
+default keys, so return any of them that handlers still need. Values may be
+plain values or zero-argument functions; those functions are awaited before
+injection. The map is available to any signature slot declared as
+`s.injectable(key)`.
 
 ## Permission checks
 
@@ -343,12 +359,13 @@ descriptor)` is called:
 
 ```ts
 app.use('/', createExpressRouter(repository, {
-  mkInjectable: (req, res, repo) => ({
-    request: req,
-    repository: repo,
+  mkInjectable: ({ request, session }) => ({
+    request,
     perm_check: async (grantTo: string[]) => {
-      const roles = (req as any).session?.user?.roles ?? [];
-      return roles.some((r: string) => grantTo.includes(r));
+      const roles =
+        (session as { user?: { roles?: string[] } } | undefined)?.user?.roles ??
+        [];
+      return roles.some((role) => grantTo.includes(role));
     },
   }),
 }));

@@ -183,7 +183,7 @@ repository.register(
 );
 ```
 
-The exact way to create `currentUser` depends on transport configuration: see `InjectableFactory`, `Injectables`, and transport options below.
+The exact way to create `currentUser` depends on transport configuration: see `InjectableFactory`, `Injections`, and transport options below.
 
 ## Errors and protocol codes
 
@@ -233,7 +233,7 @@ interface ExpressOptions {
 }
 ```
 
-- `mkInjectable(req, res, repository)` returns a map of server-side injectable values.
+- `mkInjectable(context, repository)` returns a map of server-side injectable values. For Express, `context` is `{ request, session, response }`. The transport then sets `repository` on that map.
 - `errorTransform` maps unhandled errors to `RPCError`.
 - `bodyLimit` controls the JSON body size; source default is `'1mb'`.
 - `useHtdoc` enables/disables the bundled documentation UI. Source default is `process.env.NODE_ENV !== 'production'`.
@@ -244,7 +244,7 @@ Example:
 const app = express();
 app.use("/rpc", createExpressRouter(repository, {
   bodyLimit: "1mb",
-  mkInjectable: (req, res) => ({ request: req, response: res }),
+  mkInjectable: ({ request, response }) => ({ request, response }),
 }));
 ```
 
@@ -363,10 +363,10 @@ interface RPCFailure {
 }
 
 type RPCResponse = RPCSuccess | RPCStreamSuccess | RPCFailure;
-type Injectables = Record<string, unknown | (() => unknown | Promise<unknown>)>;
+type Injections = Record<string, unknown | (() => unknown | Promise<unknown>)>;
 
 interface InjectableFactory {
-  (req: unknown, res: unknown, repository: Repository): Injectables;
+  (context: Record<string, unknown>, repository: Repository): Injections;
 }
 
 interface RPCRequestInput {
@@ -377,7 +377,7 @@ interface RPCRequestInput {
 }
 
 interface InvokeOptions {
-  injections?: Injectables;
+  injections?: Injections;
   errorTransform?: RPCErrorTransform | undefined;
 }
 
