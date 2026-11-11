@@ -1,3 +1,5 @@
+> 历史稿，不是当前 API。当前用法以仓库根目录的 README.md 和 SKILL.md 为准。
+
 请继续实现 JavaScript JSON.stringify 的 AsyncGenerator 流式序列化器。
 兼容性目标：尽可能兼容原生 JSON.stringify，包括 replacer、space 等选项。
 主要目标：兼顾内存、性能和实现复杂度。

@@ -1,6 +1,6 @@
 import type { SchemaDescription } from '../schema/json/primitives';
 import { RPCError } from '../errors/RPCError';
-import { METHOD_NOT_FOUND } from '../errors/codes';
+import { INVALID_PARAMS, METHOD_NOT_FOUND } from '../errors/codes';
 import { assertAccessible } from './permission';
 import type { Repository } from './Repository';
 import { InjectableMarker, VoidMarker, StreamMarker, Schema } from '../schema/json';
@@ -24,7 +24,9 @@ export interface JSONSchema {
     maxItems?: number;
     minProperties?: number;
     maxProperties?: number;
-    items?: JSONSchema | JSONSchema[];
+    items?: JSONSchema | JSONSchema[] | false;
+    /** JSON Schema 2020-12 tuple elements. `items` is then `false`. */
+    prefixItems?: JSONSchema[];
     properties?: Record<string, JSONSchema>;
     required?: string[];
     additionalProperties?: boolean | JSONSchema;
@@ -60,7 +62,10 @@ function convert(desc: SchemaDescription): JSONSchema {
             break;
         case 'literal': {
             const value = (desc.constraints as { value: unknown }).value;
+            // `enum` is what OpenAI and Anthropic tool validators accept.
+            // `const` stays so JSON Schema clients that understand it still see the exact value.
             out.const = value;
+            out.enum = [value];
             out.type = typeof value; // string | number | boolean
             break;
         }
@@ -79,10 +84,11 @@ function convert(desc: SchemaDescription): JSONSchema {
         }
         case 'tuple': {
             out.type = 'array';
-            const items = desc.elements;
-            out.items = items.map(convert);
+            const items = desc.elements.map(convert);
+            out.prefixItems = items;
             out.minItems = items.length;
             out.maxItems = items.length;
+            out.items = false;
             break;
         }
         case 'object': {
@@ -255,10 +261,45 @@ export function decodeMethodName(encoded: string): string {
     return encoded.replaceAll('__', '.').replaceAll('_x', '_');
 }
 
+export type LlmToolFormat = 'openai' | 'anthropic';
+
+export interface AnthropicTool {
+    name: string;
+    description: string;
+    input_schema: Record<string, unknown>;
+}
+
 export interface LlmToolOptions {
     includeStreaming: boolean;
     namePrefix: string;
     prefix?: string;
+    format: LlmToolFormat;
+}
+
+/** Map the default OpenAI tool list into Anthropic tool objects. */
+export function toAnthropicTools(tools: LlmTools): AnthropicTool[] {
+    return tools.map((tool) => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        input_schema: tool.function.parameters,
+    }));
+}
+
+function formatErrorDetail(data: unknown): string {
+    if (data === undefined) return '';
+    if (typeof data === 'string') return data;
+    try {
+        return JSON.stringify(data);
+    } catch {
+        return String(data);
+    }
+}
+
+/** RPCError whose message includes `data`, so a model can read the correction without a separate field. */
+function llmError(code: number, message: string, data?: unknown): RPCError {
+    const detail = formatErrorDetail(data);
+    const text = detail.length > 0 && !message.includes(detail) ? `${message}: ${detail}` : message;
+    return new RPCError(code, text, data);
 }
 
 export function readLlmToolOptions(rawOptions: unknown): LlmToolOptions {
@@ -266,11 +307,13 @@ export function readLlmToolOptions(rawOptions: unknown): LlmToolOptions {
         includeStreaming?: boolean;
         namePrefix?: string;
         prefix?: string;
+        format?: string;
     };
     return {
         includeStreaming: opts.includeStreaming === true,
         namePrefix: opts.namePrefix ?? '',
         ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
+        format: opts.format === 'anthropic' ? 'anthropic' : 'openai',
     };
 }
 
@@ -306,12 +349,22 @@ export function methodFromToolName(toolName: string, namePrefix = ''): string {
     return decodeMethodName(toolName);
 }
 
+export function listLlmTools(
+    repository: Repository,
+    injections: Injections,
+    rawOptions: { format: 'anthropic' },
+): Promise<AnthropicTool[]>;
+export function listLlmTools(
+    repository: Repository,
+    injections: Injections,
+    rawOptions?: unknown,
+): Promise<LlmTools>;
 export async function listLlmTools(
     repository: Repository,
     injections: Injections,
     rawOptions?: unknown,
-): Promise<LlmTools> {
-    const { includeStreaming, prefix, namePrefix } = readLlmToolOptions(rawOptions);
+): Promise<LlmTools | AnthropicTool[]> {
+    const { includeStreaming, prefix, namePrefix, format } = readLlmToolOptions(rawOptions);
     const tools: LlmTools = [];
     for (const name of repository.list()) {
         if (prefix && !name.startsWith(prefix)) continue;
@@ -337,7 +390,12 @@ export async function listLlmTools(
             const slot = descriptor.signature[i]!;
             if (slot instanceof InjectableMarker) continue;
             const key = `param${paramIndex}`;
-            properties[key] = schemaToJSONSchema(slot as never);
+            const schema = schemaToJSONSchema(slot as never);
+            const positional = `第 ${paramIndex + 1} 个位置参数`;
+            schema.description = schema.description
+                ? `${positional}。${schema.description}`
+                : positional;
+            properties[key] = schema;
             required.push(key);
             paramIndex++;
         }
@@ -374,7 +432,7 @@ export async function listLlmTools(
         });
     }
 
-    return tools;
+    return format === 'anthropic' ? toAnthropicTools(tools) : tools;
 }
 
 export async function invokeLlmTool(
@@ -389,7 +447,13 @@ export async function invokeLlmTool(
     const params: unknown[] = [];
     for (let i = 0; i < args_len; i++) {
         const key = `param${i}`;
-        if (!(key in args)) throw new Error(`Missing tool argument: ${key}`);
+        if (!(key in args)) {
+            throw llmError(
+                INVALID_PARAMS,
+                'Invalid params',
+                `Missing tool argument \`${key}\`.`,
+            );
+        }
         params.push(args[key]);
     }
     const method = methodFromToolName(name, namePrefix);
@@ -400,7 +464,11 @@ export async function invokeLlmTool(
 
     const rpc_failure = rpc_result as unknown as RPCFailure;
     if ("error" in rpc_failure) {
-        throw new Error(rpc_failure.error.code + ": " + rpc_failure.error.message);
+        throw llmError(
+            rpc_failure.error.code,
+            rpc_failure.error.message,
+            rpc_failure.error.data,
+        );
     }
 
     const rpc_success = rpc_result as unknown as RPCSuccess;
@@ -412,8 +480,8 @@ export async function invokeLlmTool(
     if ("chunks" in rpc_stream_success) {
         return (async function* () {
             for await (const chunk of rpc_stream_success.chunks) {
-                if ("error" in chunk) {
-                    throw new Error(chunk.error.code + ": " + chunk.error.message);
+                if ("error" in chunk && chunk.error) {
+                    throw llmError(chunk.error.code, chunk.error.message);
                 }
                 const unpacked_chunk: Record<string, unknown> = {};
                 if ("index" in chunk) {

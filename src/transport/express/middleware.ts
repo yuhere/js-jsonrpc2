@@ -21,6 +21,10 @@ export interface ExpressOptions {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const defaultStaticDir = path.resolve(here, '..', '..', '..', 'htdoc');
 
+/**
+ * Express router for `POST /` JSON-RPC requests.
+ * @example app.use('/', createExpressRouter(repository, { bodyLimit: '1mb' }))
+ */
 export function createExpressRouter(
   repository: Repository,
   {

@@ -6,7 +6,7 @@ import { convertParams } from './convert';
 import { checkPermission } from './permission';
 import { validateRequest } from './spec-check';
 import { registerSystemMethods } from './system-methods';
-import { listLlmTools, invokeLlmTool } from './llm-tools';
+import { listLlmTools, invokeLlmTool, type AnthropicTool } from './llm-tools';
 import { registerSchema } from '../schema/z/register';
 import { RPCVersion } from '../schema/z/protocol';
 import type { z } from 'zod';
@@ -83,6 +83,11 @@ export class Repository {
     return this.metrics;
   }
 
+  /**
+   * Register a method. `signature[0]` is the return schema; later slots are
+   * parameters or `s.injectable(key)`.
+   * @example repository.register({ namespace: 'add', signature: [s.number(), s.number(), s.number()] }, (a: number, b: number) => a + b)
+   */
   register(descriptor: RPCDescriptor, fn: RPCHandler): void {
     const result = registerSchema.safeParse([descriptor, fn]);
     if (!result.success) {
@@ -242,7 +247,9 @@ export class Repository {
     return invokeLlmTool(this, call, injections, rawOptions);
   }
 
-  async listLlmTools(injections: Injections, rawOptions?: unknown): Promise<LlmTools> {
+  listLlmTools(injections: Injections, rawOptions: { format: 'anthropic' }): Promise<AnthropicTool[]>;
+  listLlmTools(injections: Injections, rawOptions?: unknown): Promise<LlmTools>;
+  listLlmTools(injections: Injections, rawOptions?: unknown): Promise<LlmTools | AnthropicTool[]> {
     return listLlmTools(this, injections, rawOptions);
   }
 
@@ -354,6 +361,11 @@ export class Repository {
   }
 }
 
+/**
+ * Create a repository. `system.*` and `llm.tools` are installed unless
+ * `withSystemMethods` is `false`.
+ * @example createRepository({ withSystemMethods: true })
+ */
 export function createRepository(options: RepositoryOptions = {}): Repository {
   return new Repository(options);
 }
