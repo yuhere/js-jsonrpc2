@@ -358,8 +358,23 @@ describe('stringifyStream', () => {
                     }
                     return { value: undefined, done: true };
                 },
+                [Symbol.iterator]() {
+                    return this;
+                },
             };
             expect(await collect(stringifyStream(customIterator))).toBe('[0,1,2]');
+        });
+
+        it('serializes a plain object with next as an object', async () => {
+            const obj = {
+                name: 'ada',
+                next() {
+                    return { done: true };
+                },
+            };
+            expect(await collect(stringifyStream(obj))).toBe(
+                '{"name":"ada","next":null}'
+            );
         });
 
         it('Buffer → hex string', async () => {
@@ -753,6 +768,9 @@ describe('stringifyStream', () => {
                         return { value: this._i++, done: false };
                     }
                     return { value: undefined, done: true };
+                },
+                [Symbol.iterator]() {
+                    return this;
                 },
             };
             const result = await collect(
