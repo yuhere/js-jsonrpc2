@@ -10983,7 +10983,7 @@ function Footer() {
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 			className: "footer-version",
 			title: t("footer.version"),
-			children: ["v", "2.1.16"]
+			children: ["v", "2.1.17"]
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "footer-links",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
@@ -11401,4 +11401,4 @@ function App() {
 import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(I18nProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }) }));
 //#endregion
 
-//# sourceMappingURL=index-CsgcOtR7.js.map
+//# sourceMappingURL=index-DpCw_Q4m.js.map
