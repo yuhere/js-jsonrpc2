@@ -5,7 +5,7 @@
   "homepage": "https://github.com/yuhere/js-jsonrpc2#readme",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=18"
   },
   "author": {
     "name": "yuhere@gmail.com"
@@ -24,7 +24,7 @@
     "url": "git+https://github.com/yuhere/js-jsonrpc2.git"
   },
   "type": "module",
-  "main": "./dist/index.cjs",
+  "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -55,7 +55,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "clean": "rm -rf dist htdoc/assets htdoc/index.html"
+    "clean": "node -e \"const fs=require('node:fs'); for (const p of ['dist','htdoc/assets','htdoc/index.html']) fs.rmSync(p,{recursive:true,force:true})\"",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "json-rpc",
@@ -83,13 +84,17 @@
     "supertest": "^7.3.1",
     "tsc-esm-fix": "^3.1.2",
     "tsx": "^4.23.15",
+    "express": "^5.3.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
   },
+  "peerDependencies": {
+    "express": "^4.18.0 || ^5.0.0"
+  },
   "dependencies": {
     "body-parser": "^2.4.0",
-    "express": "^5.3.0",
+    "type-is": "^2.1.0",
     "ws": "^8.22.0",
     "zod": "^4.6.7"
   }
