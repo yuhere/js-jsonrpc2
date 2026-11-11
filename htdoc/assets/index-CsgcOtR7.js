@@ -7537,9 +7537,146 @@ var require_client = /* @__PURE__ */ __commonJSMin(((exports) => {
 	exports.hydrateRoot = m.hydrateRoot;
 }));
 //#endregion
+//#region \0@oxc-project+runtime@0.154.0/helpers/esm/typeof.js
+function _typeof(o) {
+	"@babel/helpers - typeof";
+	return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o) {
+		return typeof o;
+	} : function(o) {
+		return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o;
+	}, _typeof(o);
+}
+//#endregion
+//#region \0@oxc-project+runtime@0.154.0/helpers/esm/toPrimitive.js
+function toPrimitive(t, r) {
+	if ("object" != _typeof(t) || !t) return t;
+	var e = t[Symbol.toPrimitive];
+	if (void 0 !== e) {
+		var i = e.call(t, r || "default");
+		if ("object" != _typeof(i)) return i;
+		throw new TypeError("@@toPrimitive must return a primitive value.");
+	}
+	return ("string" === r ? String : Number)(t);
+}
+//#endregion
+//#region \0@oxc-project+runtime@0.154.0/helpers/esm/toPropertyKey.js
+function toPropertyKey(t) {
+	var i = toPrimitive(t, "string");
+	return "symbol" == _typeof(i) ? i : i + "";
+}
+//#endregion
+//#region \0@oxc-project+runtime@0.154.0/helpers/esm/defineProperty.js
+function _defineProperty(e, r, t) {
+	return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
+		value: t,
+		enumerable: !0,
+		configurable: !0,
+		writable: !0
+	}) : e[r] = t, e;
+}
+//#endregion
 //#region webui/src/client/httpTransport.ts
+var HTTP_CALL_OPTIONS = Symbol.for("js-jsonrpc2.httpCallOptions");
+function httpCallOptions(options = {}) {
+	return Object.assign(Object.create(null), options, { [HTTP_CALL_OPTIONS]: true });
+}
+/** Raised when the HTTP call exceeds its timeout. Not used for caller aborts or network failures. */
+var HttpTimeoutError = class extends Error {
+	constructor(timeout) {
+		super(`HTTP request timed out after ${timeout}ms`);
+		_defineProperty(this, "timeout", void 0);
+		this.name = "HttpTimeoutError";
+		this.timeout = timeout;
+	}
+};
 var idCounter$1 = 0;
-async function readLine(reader, decoder, state) {
+function positiveTimeout(value) {
+	if (value === void 0 || !Number.isFinite(value) || value <= 0) return void 0;
+	return value;
+}
+function toAbortError(reason) {
+	if (reason instanceof Error) return reason;
+	return new DOMException("The operation was aborted.", "AbortError");
+}
+function createAbortLink(user, timeoutMs) {
+	let cause;
+	const fail = (err) => {
+		if (cause === "timeout" && timeoutMs !== void 0) throw new HttpTimeoutError(timeoutMs);
+		if (cause === "abort") throw toAbortError(user?.reason);
+		throw err;
+	};
+	if (!user && timeoutMs === void 0) return {
+		cleanup() {},
+		fail
+	};
+	const controller = new AbortController();
+	let timer;
+	const cleanup = () => {
+		if (timer !== void 0) {
+			clearTimeout(timer);
+			timer = void 0;
+		}
+		user?.removeEventListener("abort", onUserAbort);
+	};
+	const onUserAbort = () => {
+		if (cause) return;
+		cause = "abort";
+		cleanup();
+		if (!controller.signal.aborted) controller.abort(user?.reason);
+	};
+	if (user) {
+		if (user.aborted) onUserAbort();
+		else user.addEventListener("abort", onUserAbort);
+	}
+	if (timeoutMs !== void 0 && !cause) timer = setTimeout(() => {
+		if (cause) return;
+		cause = "timeout";
+		cleanup();
+		if (!controller.signal.aborted) controller.abort(new HttpTimeoutError(timeoutMs));
+	}, timeoutMs);
+	return {
+		signal: controller.signal,
+		cleanup,
+		fail
+	};
+}
+function isHttpCallOptions(value) {
+	return typeof value === "object" && value !== null && HTTP_CALL_OPTIONS in value;
+}
+async function raceAbort(promise, signal, fail) {
+	if (!signal) return promise;
+	if (signal.aborted) fail(signal.reason);
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		const onAbort = () => {
+			if (settled) return;
+			settled = true;
+			signal.removeEventListener("abort", onAbort);
+			try {
+				fail(signal.reason);
+			} catch (err) {
+				reject(err);
+			}
+		};
+		signal.addEventListener("abort", onAbort);
+		promise.then((value) => {
+			if (settled) return;
+			settled = true;
+			signal.removeEventListener("abort", onAbort);
+			resolve(value);
+		}, (err) => {
+			if (settled) return;
+			settled = true;
+			signal.removeEventListener("abort", onAbort);
+			try {
+				fail(err);
+			} catch (thrown) {
+				reject(thrown);
+			}
+		});
+	});
+}
+async function readLine(reader, decoder, state, signal, fail) {
 	while (true) {
 		const nl = state.buf.indexOf("\n");
 		if (nl >= 0) {
@@ -7548,7 +7685,7 @@ async function readLine(reader, decoder, state) {
 			if (line) return line;
 			continue;
 		}
-		const { done, value } = await reader.read();
+		const { done, value } = await raceAbort(reader.read(), signal, fail);
 		if (done) {
 			const trailing = state.buf.trim();
 			state.buf = "";
@@ -7561,70 +7698,97 @@ function isStreamFrame$1(v) {
 	return !!v && typeof v === "object" && typeof v.done === "boolean";
 }
 function createHttpRPC(options = {}) {
-	const { endpoint = "", headers = {}, fetchImpl = fetch } = options;
+	const { endpoint = "", headers = {}, fetchImpl = fetch, timeout: defaultTimeout } = options;
 	function call(method, ...params) {
+		const id = ++idCounter$1;
+		let callOptions;
+		if (isHttpCallOptions(params[params.length - 1])) {
+			callOptions = params[params.length - 1];
+			params = params.slice(0, -1);
+		}
+		const timeoutMs = positiveTimeout(callOptions && "timeout" in callOptions ? callOptions.timeout : defaultTimeout);
+		const link = createAbortLink(callOptions?.signal, timeoutMs);
 		const body = {
 			jsonrpc: "2.0",
 			method,
 			params,
-			id: ++idCounter$1
+			id
 		};
 		return (async () => {
-			const res = await fetchImpl(endpoint, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"Accept": "application/json, application/x-ndjson",
-					...headers
-				},
-				body: JSON.stringify(body)
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-			if (!res.body) {
-				const payload = await res.json();
-				if (payload.error) throw new RPCError(payload.error);
-				return payload.result;
-			}
-			const reader = res.body.getReader();
-			const decoder = new TextDecoder();
-			const state = { buf: "" };
-			const firstLine = await readLine(reader, decoder, state);
-			if (firstLine === void 0) {
-				await reader.cancel().catch(() => {});
-				throw new Error(`Empty response for ${method}`);
-			}
-			let first;
+			let reader;
+			let releaseOnReturn = true;
+			const release = () => {
+				if (!releaseOnReturn) return;
+				releaseOnReturn = false;
+				link.cleanup();
+			};
 			try {
-				first = JSON.parse(firstLine);
-			} catch (e) {
-				await reader.cancel().catch(() => {});
-				throw new Error(`Invalid JSON response for ${method}: ${e instanceof Error ? e.message : String(e)}`);
-			}
-			if (!isStreamFrame$1(first)) {
-				const payload = first;
-				await reader.cancel().catch(() => {});
-				if (payload.error) throw new RPCError(payload.error);
-				return payload.result;
-			}
-			return (async function* () {
-				let drained = false;
-				try {
-					let chunk = first;
-					while (true) {
-						if (chunk.error) throw new RPCError(chunk.error);
-						if (chunk.done) {
-							drained = true;
-							return;
-						}
-						if (chunk.value !== void 0) yield chunk.value;
-						const line = await readLine(reader, decoder, state);
-						if (line === void 0) throw new Error("Stream ended without terminal frame");
-						chunk = JSON.parse(line);
-					}
-				} finally {
-					if (!drained) await reader.cancel().catch(() => {});
+				const init = {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"Accept": "application/json, application/x-ndjson",
+						...headers
+					},
+					body: JSON.stringify(body)
+				};
+				if (link.signal) init.signal = link.signal;
+				const res = await raceAbort(fetchImpl(endpoint, init), link.signal, link.fail);
+				if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+				if (!res.body) {
+					const payload = await raceAbort(res.json(), link.signal, link.fail);
+					if (payload.error) throw new RPCError(payload.error);
+					return payload.result;
 				}
-			})();
+				reader = res.body.getReader();
+				const ownedReader = reader;
+				const decoder = new TextDecoder();
+				const state = { buf: "" };
+				const firstLine = await readLine(ownedReader, decoder, state, link.signal, link.fail);
+				if (firstLine === void 0) {
+					await ownedReader.cancel().catch(() => {});
+					throw new Error(`Empty response for ${method}`);
+				}
+				let first;
+				try {
+					first = JSON.parse(firstLine);
+				} catch (e) {
+					await ownedReader.cancel().catch(() => {});
+					throw new Error(`Invalid JSON response for ${method}: ${e instanceof Error ? e.message : String(e)}`);
+				}
+				if (!isStreamFrame$1(first)) {
+					const payload = first;
+					await ownedReader.cancel().catch(() => {});
+					if (payload.error) throw new RPCError(payload.error);
+					return payload.result;
+				}
+				releaseOnReturn = false;
+				return (async function* () {
+					let drained = false;
+					try {
+						let chunk = first;
+						while (true) {
+							if (chunk.error) throw new RPCError(chunk.error);
+							if (chunk.done) {
+								drained = true;
+								return;
+							}
+							if (chunk.value !== void 0) yield chunk.value;
+							const line = await readLine(ownedReader, decoder, state, link.signal, link.fail);
+							if (line === void 0) throw new Error("Stream ended without terminal frame");
+							chunk = JSON.parse(line);
+						}
+					} finally {
+						link.cleanup();
+						if (!drained) await ownedReader.cancel().catch(() => {});
+					}
+				})();
+			} catch (err) {
+				if (reader) await reader.cancel().catch(() => {});
+				return link.fail(err);
+			} finally {
+				release();
+			}
 		})();
 	}
 	return {
@@ -7652,29 +7816,53 @@ function isStreamFrame(v) {
 }
 function createWsRPC(options = {}) {
 	const { endpoint = deriveWsEndpoint(), connectTimeoutMs = 5e3, callTimeoutMs = 15e3 } = options;
-	const pending = /* @__PURE__ */ new Map();
 	const streams = /* @__PURE__ */ new Map();
 	const firstWaiters = /* @__PURE__ */ new Map();
 	let socket = null;
 	let openPromise = null;
 	let closedByUser = false;
 	function rejectAll(reason) {
-		for (const [, p] of pending) {
-			clearTimeout(p.timer);
-			p.reject(new Error(reason));
-		}
-		pending.clear();
-		for (const [, sub] of streams) sub.fail(new Error(reason));
-		streams.clear();
-		for (const [, w] of firstWaiters) w({
-			jsonrpc: "2.0",
-			id: 0,
-			error: {
-				code: -32603,
-				message: reason
-			}
+		const error = new RPCError({
+			code: -32603,
+			message: reason
 		});
-		firstWaiters.clear();
+		for (const [id, waiter] of [...firstWaiters]) {
+			firstWaiters.delete(id);
+			waiter.reject(error);
+		}
+		for (const [id, sub] of [...streams]) {
+			streams.delete(id);
+			sub.fail(new Error(reason));
+		}
+	}
+	function failInFlight(payload) {
+		const inflight = firstWaiters.size + streams.size;
+		if (inflight === 0) return;
+		const error = new RPCError(payload);
+		if (inflight === 1) {
+			const waiting = firstWaiters.entries().next();
+			if (!waiting.done) {
+				const [id, waiter] = waiting.value;
+				firstWaiters.delete(id);
+				waiter.reject(error);
+				return;
+			}
+			const streaming = streams.entries().next();
+			if (!streaming.done) {
+				const [id, sub] = streaming.value;
+				streams.delete(id);
+				sub.fail(error);
+			}
+			return;
+		}
+		for (const [id, waiter] of [...firstWaiters]) {
+			firstWaiters.delete(id);
+			waiter.reject(error);
+		}
+		for (const [id, sub] of [...streams]) {
+			streams.delete(id);
+			sub.fail(error);
+		}
 	}
 	function attach(ws) {
 		ws.addEventListener("message", (ev) => {
@@ -7687,11 +7875,14 @@ function createWsRPC(options = {}) {
 			const list = Array.isArray(data) ? data : [data];
 			for (const msg of list) {
 				if (!msg || typeof msg !== "object") continue;
-				if (msg.id == null) continue;
+				if (msg.id == null) {
+					if (msg.error) failInFlight(msg.error);
+					continue;
+				}
 				const fw = firstWaiters.get(msg.id);
 				if (fw) {
 					firstWaiters.delete(msg.id);
-					fw(msg);
+					fw.resolve(msg);
 					continue;
 				}
 				if (isStreamFrame(msg)) {
@@ -7708,15 +7899,7 @@ function createWsRPC(options = {}) {
 						continue;
 					}
 					if (msg.value !== void 0) sub.push(msg.value);
-					continue;
 				}
-				const p = pending.get(msg.id);
-				if (!p) continue;
-				pending.delete(msg.id);
-				clearTimeout(p.timer);
-				const plain = msg;
-				if (plain.error) p.reject(new RPCError(plain.error));
-				else p.resolve(plain.result);
 			}
 		});
 		ws.addEventListener("close", () => {
@@ -7781,15 +7964,26 @@ function createWsRPC(options = {}) {
 					firstWaiters.delete(id);
 					reject(/* @__PURE__ */ new Error(`调用 ${method} 超时（${callTimeoutMs}ms）`));
 				}, callTimeoutMs);
-				firstWaiters.set(id, (msg) => {
-					clearTimeout(timer);
-					resolve(msg);
+				firstWaiters.set(id, {
+					timer,
+					resolve: (msg) => {
+						clearTimeout(timer);
+						resolve(msg);
+					},
+					reject: (err) => {
+						clearTimeout(timer);
+						reject(err);
+					}
 				});
 			});
 			try {
 				ws.send(JSON.stringify(payload));
 			} catch (e) {
-				firstWaiters.delete(id);
+				const waiter = firstWaiters.get(id);
+				if (waiter) {
+					firstWaiters.delete(id);
+					clearTimeout(waiter.timer);
+				}
 				throw e;
 			}
 			let firstMsg;
@@ -7863,44 +8057,6 @@ function createWsRPC(options = {}) {
 	};
 }
 //#endregion
-//#region \0@oxc-project+runtime@0.154.0/helpers/esm/typeof.js
-function _typeof(o) {
-	"@babel/helpers - typeof";
-	return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function(o) {
-		return typeof o;
-	} : function(o) {
-		return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o;
-	}, _typeof(o);
-}
-//#endregion
-//#region \0@oxc-project+runtime@0.154.0/helpers/esm/toPrimitive.js
-function toPrimitive(t, r) {
-	if ("object" != _typeof(t) || !t) return t;
-	var e = t[Symbol.toPrimitive];
-	if (void 0 !== e) {
-		var i = e.call(t, r || "default");
-		if ("object" != _typeof(i)) return i;
-		throw new TypeError("@@toPrimitive must return a primitive value.");
-	}
-	return ("string" === r ? String : Number)(t);
-}
-//#endregion
-//#region \0@oxc-project+runtime@0.154.0/helpers/esm/toPropertyKey.js
-function toPropertyKey(t) {
-	var i = toPrimitive(t, "string");
-	return "symbol" == _typeof(i) ? i : i + "";
-}
-//#endregion
-//#region \0@oxc-project+runtime@0.154.0/helpers/esm/defineProperty.js
-function _defineProperty(e, r, t) {
-	return (r = toPropertyKey(r)) in e ? Object.defineProperty(e, r, {
-		value: t,
-		enumerable: !0,
-		configurable: !0,
-		writable: !0
-	}) : e[r] = t, e;
-}
-//#endregion
 //#region webui/src/client/rpc.ts
 var RPCError = class extends Error {
 	constructor(payload) {
@@ -7928,7 +8084,8 @@ function createRPC(options) {
 	return createHttpRPC({
 		endpoint: options.endpoint,
 		headers: options.headers,
-		fetchImpl: options.fetchImpl
+		fetchImpl: options.fetchImpl,
+		timeout: options.timeout
 	});
 }
 //#endregion
@@ -8032,25 +8189,18 @@ function useDebouncedValue(value, delayMs = 250) {
 	return debounced;
 }
 //#endregion
-//#region webui/src/api/metrics.ts
-/** 拉取 system.metrics；如果系统方法不可用（withSystemMethods=false），返回 undefined。 */
-async function fetchMetrics(rpc) {
-	try {
-		const raw = await rpc.call("system.metrics");
-		if (!raw || typeof raw !== "object" || typeof raw.methods !== "object") return void 0;
-		return raw;
-	} catch {
-		return;
-	}
+//#region webui/src/api/histogram.ts
+function isPositiveInf(le) {
+	return le === "+Inf" || le === Number.POSITIVE_INFINITY;
 }
-/** 在给定直方图上估算某个分位数（线性插值）。 */
+/** 在给定直方图上估算某个分位数（线性插值）。+Inf 桶用 max 作上界。 */
 function quantileFromHistogram(h, q) {
 	if (h.count === 0) return 0;
 	const target = q * h.count;
 	let prevLe = 0;
 	let prevCount = 0;
 	for (const b of h.buckets) {
-		if (b.le === Number.POSITIVE_INFINITY) {
+		if (isPositiveInf(b.le)) {
 			const lo = prevLe;
 			const hi = h.max;
 			const span = b.count - prevCount || 1;
@@ -8068,6 +8218,18 @@ function quantileFromHistogram(h, q) {
 		prevCount = b.count;
 	}
 	return h.max;
+}
+//#endregion
+//#region webui/src/api/metrics.ts
+/** 拉取 system.metrics；如果系统方法不可用（withSystemMethods=false），返回 undefined。 */
+async function fetchMetrics(rpc) {
+	try {
+		const raw = await rpc.call("system.metrics");
+		if (!raw || typeof raw !== "object" || typeof raw.methods !== "object") return void 0;
+		return raw;
+	} catch {
+		return;
+	}
 }
 function deriveMethod(method, stats, prev, dtSeconds) {
 	const totalErrors = Object.values(stats.errorsByCode).reduce((a, b) => a + b, 0);
@@ -8345,6 +8507,8 @@ var MESSAGES = {
 			chooseFormat: "Choose format",
 			streamEnded: "(stream ended, {count} frames, total {duration})",
 			streamEndedEmpty: "(stream ended, no data, total {duration})",
+			stop: "Stop",
+			outputTruncated: "Showing the latest {max} lines. {count} earlier lines hidden.",
 			elapsed: "elapsed",
 			firstFrame: "first frame",
 			jsonError: "JSON error: {error}"
@@ -8500,6 +8664,8 @@ var MESSAGES = {
 			chooseFormat: "选择复制格式",
 			streamEnded: "（流已结束，共 {count} 帧，总耗时 {duration}）",
 			streamEndedEmpty: "（流已结束，无数据，总耗时 {duration}）",
+			stop: "停止",
+			outputTruncated: "仅显示最近 {max} 行，更早的 {count} 行已省略。",
 			elapsed: "耗时",
 			firstFrame: "首帧",
 			jsonError: "JSON 错误：{error}"
@@ -8655,6 +8821,8 @@ var MESSAGES = {
 			chooseFormat: "選擇複製格式",
 			streamEnded: "（串流已結束，共 {count} 幀，總耗時 {duration}）",
 			streamEndedEmpty: "（串流已結束，無資料，總耗時 {duration}）",
+			stop: "停止",
+			outputTruncated: "僅顯示最近 {max} 行，更早的 {count} 行已省略。",
 			elapsed: "耗時",
 			firstFrame: "首幀",
 			jsonError: "JSON 錯誤：{error}"
@@ -8810,6 +8978,8 @@ var MESSAGES = {
 			chooseFormat: "コピー形式を選択",
 			streamEnded: "（ストリーム終了、{count} フレーム、合計 {duration}）",
 			streamEndedEmpty: "（ストリーム終了、データなし、合計 {duration}）",
+			stop: "停止",
+			outputTruncated: "最新 {max} 行のみ表示。それ以前の {count} 行は省略しました。",
 			elapsed: "経過",
 			firstFrame: "初回フレーム",
 			jsonError: "JSON エラー：{error}"
@@ -9834,7 +10004,7 @@ function ContainerChildren({ schema, value, onChange, depth, disabled }) {
 	if (schema.kind === "object") {
 		const props = schema.properties ?? {};
 		const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-		const allowUnknown = schema.constraints?.allowUnknownProps !== false;
+		const allowUnknown = schema.constraints?.allowUnknownProps === true;
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [Object.entries(props).map(([key, prop]) => {
 			if (!isSchema$1(prop)) return null;
 			return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaField, {
@@ -9982,6 +10152,105 @@ function Constraints({ schema }) {
 		children: `{ ${text} }`
 	}) : null;
 }
+function createOutputState() {
+	return {
+		lines: [],
+		dropped: 0,
+		nextId: 1
+	};
+}
+/** 追加文本行，超出 max 时从头部截掉，并累加 dropped。 */
+function appendOutputLines(state, texts, max = 500) {
+	if (texts.length === 0) return state;
+	const added = texts.map((text, index) => ({
+		id: state.nextId + index,
+		text
+	}));
+	const combined = state.lines.concat(added);
+	const nextId = state.nextId + texts.length;
+	if (combined.length <= max) return {
+		lines: combined,
+		dropped: state.dropped,
+		nextId
+	};
+	const cut = combined.length - max;
+	return {
+		lines: combined.slice(cut),
+		dropped: state.dropped + cut,
+		nextId
+	};
+}
+//#endregion
+//#region webui/src/components/TestOutput.tsx
+var TestOutput = (0, import_react.memo)((0, import_react.forwardRef)(function TestOutput({ placeholder }, ref) {
+	const t = useT();
+	const [state, setState] = (0, import_react.useState)(createOutputState);
+	const pending = (0, import_react.useRef)([]);
+	const timer = (0, import_react.useRef)(null);
+	const epoch = (0, import_react.useRef)(0);
+	const preRef = (0, import_react.useRef)(null);
+	const apply = (texts) => {
+		if (texts.length === 0) return;
+		setState((prev) => appendOutputLines(prev, texts));
+	};
+	const flushNow = () => {
+		if (timer.current != null) {
+			clearTimeout(timer.current);
+			timer.current = null;
+		}
+		const texts = pending.current;
+		pending.current = [];
+		apply(texts);
+	};
+	(0, import_react.useImperativeHandle)(ref, () => ({
+		reset() {
+			epoch.current += 1;
+			if (timer.current != null) {
+				clearTimeout(timer.current);
+				timer.current = null;
+			}
+			pending.current = [];
+			setState(createOutputState());
+		},
+		push(text) {
+			const ticket = epoch.current;
+			pending.current.push(text);
+			if (timer.current != null) return;
+			timer.current = setTimeout(() => {
+				timer.current = null;
+				if (ticket !== epoch.current) return;
+				const texts = pending.current;
+				pending.current = [];
+				apply(texts);
+			}, 80);
+		},
+		flush() {
+			flushNow();
+		}
+	}), []);
+	(0, import_react.useEffect)(() => {
+		const node = preRef.current;
+		if (!node) return;
+		node.scrollTop = node.scrollHeight;
+	}, [state.lines]);
+	(0, import_react.useEffect)(() => () => {
+		if (timer.current != null) clearTimeout(timer.current);
+	}, []);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("pre", {
+		className: "output",
+		ref: preRef,
+		children: [state.dropped > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "hint",
+			children: t("test.outputTruncated", {
+				count: state.dropped,
+				max: 500
+			})
+		}), state.lines.length === 0 ? placeholder : state.lines.map((line) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "output-line",
+			children: line.text
+		}, line.id))]
+	});
+}));
 //#endregion
 //#region webui/src/components/TestPanel.tsx
 /** 格式化耗时：<1s 用 ms，否则用 s */
@@ -10008,7 +10277,6 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 	const paramSchemas = (0, import_react.useMemo)(() => detail.signature.slice(1), [detail.signature]);
 	const isStreamReturn = detail.signature[0]?.kind === "stream";
 	const [values, setValues] = (0, import_react.useState)([]);
-	const [output, setOutput] = (0, import_react.useState)("");
 	const [elapsed, setElapsed] = (0, import_react.useState)(null);
 	const [running, setRunning] = (0, import_react.useState)(false);
 	const [copyKind, setCopyKind] = (0, import_react.useState)("curl");
@@ -10016,12 +10284,26 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 	const [copyError, setCopyError] = (0, import_react.useState)(null);
 	const [menuOpen, setMenuOpen] = (0, import_react.useState)(false);
 	const menuRef = (0, import_react.useRef)(null);
-	const outRef = (0, import_react.useRef)(null);
+	const outputRef = (0, import_react.useRef)(null);
+	const runSeq = (0, import_react.useRef)(0);
+	const activeRun = (0, import_react.useRef)(null);
+	const stopRunRef = (0, import_react.useRef)(() => {});
+	stopRunRef.current = (flush = false) => {
+		if (flush) outputRef.current?.flush();
+		const current = activeRun.current;
+		if (!current) return;
+		activeRun.current = null;
+		runSeq.current += 1;
+		current.controller.abort();
+		if (current.generator) current.generator.return(void 0).catch(() => {});
+		setRunning(false);
+	};
 	(0, import_react.useEffect)(() => {
-		if (!method) return;
-		setValues(paramSchemas.map(sampleFromSchema));
-		setOutput("");
+		if (method) setValues(paramSchemas.map(sampleFromSchema));
+		outputRef.current?.reset();
 		setElapsed(null);
+		setRunning(false);
+		return () => stopRunRef.current();
 	}, [method, paramSchemas]);
 	(0, import_react.useEffect)(() => {
 		setCopied(false);
@@ -10043,47 +10325,70 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 			return next;
 		});
 	};
+	const publish = (text, runId) => {
+		if (runSeq.current !== runId) return;
+		outputRef.current?.push(text);
+	};
 	const execute = async () => {
 		if (!method) return;
+		stopRunRef.current();
+		const runId = ++runSeq.current;
+		const controller = new AbortController();
+		const run = {
+			controller,
+			generator: void 0
+		};
+		activeRun.current = run;
 		setRunning(true);
-		setOutput("");
+		outputRef.current?.reset();
 		setElapsed(null);
 		const startedAt = performance.now();
+		const stillCurrent = () => runSeq.current === runId;
 		try {
-			const result = await rpc.call(method, ...values);
+			const args = transport === "http" ? [...values, httpCallOptions({ signal: controller.signal })] : values;
+			const result = await rpc.call(method, ...args);
+			if (!stillCurrent()) {
+				if (isStreamResult(result)) result.return(void 0).catch(() => {});
+				return;
+			}
 			const firstFrameAt = performance.now() - startedAt;
 			if (isStreamResult(result)) {
+				run.generator = result;
 				let idx = 0;
-				const lines = [];
 				for await (const value of result) {
+					if (!stillCurrent()) return;
 					const now = performance.now() - startedAt;
-					lines.push(`[${idx}] (+${formatElapsed(now)}) ${JSON.stringify(value, null, 2)}`);
+					publish(`[${idx}] (+${formatElapsed(now)}) ${JSON.stringify(value, null, 2)}`, runId);
 					idx++;
-					setOutput(lines.join("\n"));
 				}
+				if (!stillCurrent()) return;
 				const totalAt = performance.now() - startedAt;
-				if (idx === 0) lines.push(t("test.streamEndedEmpty", { duration: formatElapsed(totalAt) }));
-				else lines.push(t("test.streamEnded", {
+				publish(idx === 0 ? t("test.streamEndedEmpty", { duration: formatElapsed(totalAt) }) : t("test.streamEnded", {
 					count: idx,
 					duration: formatElapsed(totalAt)
-				}));
-				setOutput(lines.join("\n"));
+				}), runId);
+				outputRef.current?.flush();
 				setElapsed({
 					total: totalAt,
 					firstFrame: firstFrameAt
 				});
 			} else {
 				const totalAt = performance.now() - startedAt;
-				setOutput(JSON.stringify(result, null, 2));
+				for (const line of JSON.stringify(result, null, 2).split("\n")) publish(line, runId);
+				outputRef.current?.flush();
 				setElapsed({ total: totalAt });
 			}
 		} catch (e) {
+			if (!stillCurrent()) return;
 			const totalAt = performance.now() - startedAt;
-			setOutput(formatError(e));
+			for (const line of formatError(e).split("\n")) publish(line, runId);
+			outputRef.current?.flush();
 			setElapsed({ total: totalAt });
 		} finally {
-			setRunning(false);
-			requestAnimationFrame(() => outRef.current?.scrollIntoView({ block: "nearest" }));
+			if (stillCurrent()) {
+				activeRun.current = null;
+				setRunning(false);
+			}
 		}
 	};
 	const copyAs = async (kind) => {
@@ -10134,9 +10439,15 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 				className: "actions",
 				children: [
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-						onClick: execute,
+						onClick: () => void execute(),
 						disabled: !method || running,
 						children: running ? isStreamReturn ? t("test.receiving") : t("test.executing") : isStreamReturn ? t("test.executeStream") : t("test.execute")
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						type: "button",
+						onClick: () => stopRunRef.current(true),
+						disabled: !running,
+						children: t("test.stop")
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "split-button",
@@ -10189,10 +10500,10 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						onClick: () => {
-							setOutput("");
+							outputRef.current?.reset();
 							setElapsed(null);
 						},
-						disabled: !output && !elapsed,
+						disabled: !method,
 						children: t("test.clearOutput")
 					})
 				]
@@ -10222,10 +10533,9 @@ function TestPanel({ method, detail, rpc, transport, endpoint }) {
 					]
 				})
 			] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
-				className: "output",
-				ref: outRef,
-				children: output || t("test.notExecuted")
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TestOutput, {
+				ref: outputRef,
+				placeholder: t("test.notExecuted")
 			})
 		]
 	});
@@ -11091,4 +11401,4 @@ function App() {
 import_client.createRoot(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThemeProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(I18nProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }) }));
 //#endregion
 
-//# sourceMappingURL=index-C2Pf9oxO.js.map
+//# sourceMappingURL=index-CsgcOtR7.js.map
