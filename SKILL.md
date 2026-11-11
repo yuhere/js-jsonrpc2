@@ -209,7 +209,12 @@ are awaited.
 ## Enforce permissions
 
 1. Add `grantTo: ['role', ...]` to the descriptor.
-2. Inject `perm_check(grantTo, descriptor)` via `mkInjectable`.
+2. Inject `perm_check(grantTo, descriptor, injections)` via `mkInjectable`.
+   `grantTo` is `readonly string[]`, `descriptor` is `MethodDescriptor`, and
+   `injections` is the same map. Return `boolean` or `RPCError` (or a promise
+   of either). Both types are exported. `perm_check` is called with those
+   arguments. It is not evaluated with zero arguments the way a signature
+   `s.injectable()` value is.
 3. Return `true` to allow, return an `RPCError` to re-throw it verbatim, or
    return anything else to get `PERMISSION_DENIED (-32604)`.
 4. Do not rely on `grantTo` alone — without `perm_check`, the check is skipped.

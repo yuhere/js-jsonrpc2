@@ -269,6 +269,8 @@ repository.register(
 
 提供 `mkInjectable` 时，返回值会替换上述默认键，但传输层始终把 `repository` 设为当前仓库，并额外加入指向该映射自身的 `injections`。应用 **SHOULD** 只返回处理函数需要的值。
 
+如果映射中有 `perm_check`，其类型是 `PermCheck`：`(grantTo: readonly string[], descriptor: MethodDescriptor, injections: Injections) => boolean | RPCError | Promise<boolean | RPCError>`。仓库会用这三个参数调用它，不会像签名里的 injectable 那样做无参求值。返回 `true` 表示允许，返回 `RPCError` 会原样抛出，其它结果视为权限拒绝。
+
 ## 9 响应对象
 
 ### 9.1 普通响应

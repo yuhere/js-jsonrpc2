@@ -350,8 +350,8 @@ injection. The map is available to any signature slot declared as
 
 ## Permission checks
 
-When a descriptor declares `grantTo`, the injected `perm_check(grantTo,
-descriptor)` is called:
+When a descriptor declares `grantTo`, the injected
+`perm_check(grantTo, descriptor, injections)` is called:
 
 - returns `true` → allowed
 - returns an `RPCError` → re-thrown as-is
@@ -359,6 +359,9 @@ descriptor)` is called:
 
 `grantTo` is only enforced when a `perm_check` injectable is provided. Without
 `perm_check`, methods that declare `grantTo` are callable by anyone.
+
+`perm_check` is called with those three arguments. It is not evaluated with
+zero arguments the way a signature `s.injectable()` value is.
 
 ```ts
 app.use('/', createExpressRouter(repository, {

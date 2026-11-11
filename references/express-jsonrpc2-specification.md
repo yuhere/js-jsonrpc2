@@ -260,6 +260,8 @@ When `mkInjectable` is omitted, the default map is:
 
 When `mkInjectable` is supplied, its return value replaces those defaults except `repository`, which the transport always sets to the server repository. It also adds `injections`, the map itself. Applications SHOULD return only the values required by handlers.
 
+`perm_check`, when present, is `PermCheck`: `(grantTo: readonly string[], descriptor: MethodDescriptor, injections: Injections) => boolean | RPCError | Promise<boolean | RPCError>`. The repository calls it with those three arguments. It is not evaluated with zero arguments the way a signature injectable is. `true` allows the call, an `RPCError` is rethrown, and any other result is permission denied.
+
 ## 9 Response Objects
 
 ### 9.1 Ordinary responses

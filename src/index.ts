@@ -20,3 +20,4 @@ export { attachWebSocket, createWebSocketServer, serveStdio };
 export type { WSOptions, StandaloneWsOptions, StandaloneWsHandle } from './transport/ws';
 export type { StdioOptions } from './transport/stdio';
 export type { ExpressOptions } from './transport/express';
+export type { MethodDescriptor } from './core/descriptor';

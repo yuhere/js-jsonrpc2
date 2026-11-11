@@ -388,6 +388,8 @@ interface RepositoryOptions {
 type RPCErrorTransform = (error: unknown) => RPCError | undefined;
 ```
 
+`perm_check` is called with `(grantTo, descriptor, injections)`. It is not evaluated with zero arguments the way a signature injectable is.
+
 `RPCVersion` is the protocol version type used by the source (`"2.0"` in the protocol). `RPCHandler` is broad at the public type level; use explicit handler parameter/return annotations in application code.
 
 ## Streaming RPC responses

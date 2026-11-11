@@ -10,11 +10,7 @@ export async function checkPermission(descriptor: MethodDescriptor, injections: 
   const permCheck = injections['perm_check'];
   if (typeof permCheck !== 'function') return;
 
-  const result = await (permCheck as (grantTo: string[], descriptor: MethodDescriptor, injections: Injections) => unknown)(
-    grantTo,
-    descriptor,
-    injections
-  );
+  const result = await permCheck(grantTo, descriptor, injections);
 
   if (result === true) return;
 
