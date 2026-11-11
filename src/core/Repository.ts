@@ -1,5 +1,5 @@
 import { RPCError } from '../errors/RPCError';
-import { INTERNAL_ERROR, INVALID_REQUEST } from '../errors/codes';
+import { INTERNAL_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND } from '../errors/codes';
 import { buildDescriptor, lookup, signatureOf } from './descriptor';
 import type { MethodDescriptor } from './descriptor';
 import { convertParams } from './convert';
@@ -125,8 +125,10 @@ export class Repository {
       }
 
       const id: RPCResId = request.id;
+      let methodResolved = false;
       try {
         const descriptor = lookup(this.methods, request.method);
+        methodResolved = true;
         await checkPermission(descriptor, injections);
         const converted = await convertParams(descriptor, request.params, injections);
         try { // errorTransform only apply when error occurs of actual call
@@ -177,6 +179,9 @@ export class Repository {
           throw e0;
         }
       } catch (error) {
+        if (!methodResolved && error instanceof RPCError && error.code === METHOD_NOT_FOUND) {
+          methodForMetrics = '<unknown>';
+        }
         if (error instanceof RPCError) {
           if (metrics) {
             const durationSeconds = (now() - startedAt) / 1000;
