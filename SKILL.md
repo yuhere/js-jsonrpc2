@@ -123,9 +123,9 @@ Stream returns are the exception (marker path in `signatureOf`):
 
 ## Stream a return value
 
-Declare `s.stream(inner)` as `signature[0]`. The handler MUST return an
-`AsyncGenerator`; anything else fails with `INTERNAL_ERROR` before any chunk is
-sent.
+Declare `s.stream(inner)` as `signature[0]`. A call is streamed only when
+that declaration is set and the handler actually returns an `AsyncIterable`.
+Otherwise the plain value is returned in `result`.
 
 1. Set `signature[0]` to `s.stream(inner)`. `inner` is any `s.Schema`
    (including `s.unknown()`). No stream-of-stream, and `s.stream()` is not
@@ -306,7 +306,8 @@ that slot at runtime.
 - **Expecting `errorTransform` to catch validation errors.** It only wraps the
   handler call.
 - **Declaring `s.stream(inner)` but returning a plain value from the handler.**
-  The server throws `INTERNAL_ERROR` before sending any chunk.
+  A call is a stream only when the method declares `s.stream` and the return
+  value is an `AsyncIterable`. A plain value is returned in `result`.
 - **Expecting chunks to be validated against `inner`.** They are not. `inner`
   is documentation only.
 - **Trying to stream `params`.** Not supported; only return values can stream.
