@@ -233,8 +233,8 @@ export class Repository {
     }
   }
 
-  async invokeLlmTool(call: LlmToolCall, injections: Injections): Promise<unknown> {
-    return invokeLlmTool(this, call, injections);
+  async invokeLlmTool(call: LlmToolCall, injections: Injections, rawOptions?: unknown): Promise<unknown> {
+    return invokeLlmTool(this, call, injections, rawOptions);
   }
 
   async listLlmTools(injections: Injections, rawOptions?: unknown): Promise<LlmTools> {

@@ -1,7 +1,12 @@
 // test/core/llm-tools.test.ts（新建）
 import { describe, it, expect } from 'vitest';
 import { Repository } from '../../src/core/Repository';
+import {
+    decodeMethodName,
+    encodeMethodName,
+} from '../../src/core/llm-tools';
 import { s } from '../../src/schema/json';
+import { INVALID_PARAMS } from '../../src/errors/codes';
 
 describe('llm.tools JSON Schema conversion', () => {
     it('maps s.null() to type "null"', async () => {
@@ -112,4 +117,99 @@ describe('llm.tools JSON Schema conversion', () => {
     });
 
 
+});
+
+describe('llm.tools names and options', () => {
+    function repoWith(names: string[]) {
+        const repo = new Repository({ withSystemMethods: false });
+        for (const namespace of names) {
+            repo.register(
+                { namespace, signature: [s.string()] },
+                () => namespace,
+            );
+        }
+        return repo;
+    }
+
+    async function callTools(repo: Repository, options: unknown) {
+        return repo.invoke(
+            { jsonrpc: '2.0', method: 'llm.tools', params: [options], id: 1 },
+            {
+                injections: {
+                    repository: () => repo,
+                    injections: () => ({}),
+                },
+            },
+        );
+    }
+
+    it('accepts empty, partial, and null options', async () => {
+        const repo = new Repository({ withSystemMethods: true });
+        const empty = await callTools(repo, {});
+        const partial = await callTools(repo, { includeStreaming: true });
+        const absent = await callTools(repo, null);
+        const unknown = await callTools(repo, { nope: true });
+
+        expect(empty).toMatchObject({ id: 1 });
+        expect(partial).toMatchObject({ id: 1 });
+        expect(absent).toMatchObject({ id: 1 });
+        expect(Array.isArray((empty as { result: unknown }).result)).toBe(true);
+        expect(Array.isArray((partial as { result: unknown }).result)).toBe(true);
+        expect(Array.isArray((absent as { result: unknown }).result)).toBe(true);
+        expect(unknown).toMatchObject({ error: { code: INVALID_PARAMS } });
+    });
+
+    it('filters with prefix and prepends namePrefix', async () => {
+        const repo = repoWith(['a.b', 'a_b', 'b.c']);
+        const tools = await repo.listLlmTools({}, { prefix: 'a.', namePrefix: 'tool_' });
+        expect(tools.map((tool) => tool.function.name)).toEqual(['tool_a__b']);
+        expect(await repo.invokeLlmTool(
+            { name: 'tool_a__b', arguments: {} },
+            {},
+            { namePrefix: 'tool_' },
+        )).toBe('a.b');
+    });
+
+    it('round-trips dots, underscores, and existing _x / __ sequences', () => {
+        const samples = ['foo', 'foo_bar', 'a.b', 'a_b', 'a.b_c', 'a_x', 'a__b', '._', '_.', 'a_.b', 'x_x.__'];
+        for (const method of samples) {
+            expect(decodeMethodName(encodeMethodName(method))).toBe(method);
+        }
+
+        const seen = new Map<string, string>();
+        const alphabet = ['a', '.', '_', 'x'];
+        const visit = (value: string) => {
+            const encoded = encodeMethodName(value);
+            const previous = seen.get(encoded);
+            expect(previous, `${value} collided with ${previous} as ${encoded}`).toBeUndefined();
+            seen.set(encoded, value);
+            expect(decodeMethodName(encoded)).toBe(value);
+            if (value.length >= 4) return;
+            for (const ch of alphabet) visit(value + ch);
+        };
+        for (const ch of alphabet) visit(ch);
+    });
+
+    it('lists a.b and a_b separately and calls each method', async () => {
+        const repo = repoWith(['foo_bar', 'a.b', 'a_b']);
+        const tools = await repo.listLlmTools({});
+        const names = tools.map((tool) => tool.function.name);
+        expect(names).toEqual(['foo_xbar', 'a__b', 'a_xb']);
+
+        expect(await repo.invokeLlmTool({ name: 'foo_xbar', arguments: {} }, {})).toBe('foo_bar');
+        expect(await repo.invokeLlmTool({ name: 'a__b', arguments: {} }, {})).toBe('a.b');
+        expect(await repo.invokeLlmTool({ name: 'a_xb', arguments: {} }, {})).toBe('a_b');
+    });
+
+    it('rejects tool names that break the LLM name rule', async () => {
+        const slash = repoWith(['foo/bar']);
+        await expect(slash.listLlmTools({})).rejects.toThrow(/foo\/bar/);
+
+        const longName = 'a'.repeat(65);
+        const long = repoWith([longName]);
+        await expect(long.listLlmTools({})).rejects.toThrow(/65|match/);
+
+        const prefixed = repoWith(['a'.repeat(60)]);
+        await expect(prefixed.listLlmTools({}, { namePrefix: 'prefix_' })).rejects.toThrow(/prefix_/);
+    });
 });

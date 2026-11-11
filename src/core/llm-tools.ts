@@ -234,16 +234,84 @@ function renderReturnSlot(slot: unknown): string {
     return 'unknown';
 }
 
+/**
+ * LLM tool names are `[A-Za-z0-9_-]{1,64}`. Method names may contain `.`.
+ *
+ * Encode: escape each `_` as `_x`, then replace each `.` with `__`.
+ * Decode: restore `__` to `.` first, then `_x` to `_`.
+ *
+ * `__` must be decoded before `_x`. After the underscore escape, no two
+ * underscores are adjacent, so every `__` in the tool name came from a dot.
+ * Decoding `_x` first would turn `a__` (`a_x_x`) into `a__` and the following
+ * `__` pass would misread it as a dot.
+ */
+const LLM_TOOL_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
+
+export function encodeMethodName(method: string): string {
+    return method.replaceAll('_', '_x').replaceAll('.', '__');
+}
+
+export function decodeMethodName(encoded: string): string {
+    return encoded.replaceAll('__', '.').replaceAll('_x', '_');
+}
+
+export interface LlmToolOptions {
+    includeStreaming: boolean;
+    namePrefix: string;
+    prefix?: string;
+}
+
+export function readLlmToolOptions(rawOptions: unknown): LlmToolOptions {
+    const opts = (rawOptions ?? {}) as {
+        includeStreaming?: boolean;
+        namePrefix?: string;
+        prefix?: string;
+    };
+    return {
+        includeStreaming: opts.includeStreaming === true,
+        namePrefix: opts.namePrefix ?? '',
+        ...(opts.prefix !== undefined ? { prefix: opts.prefix } : {}),
+    };
+}
+
+export function llmToolName(method: string, namePrefix = ''): string {
+    const toolName = namePrefix + encodeMethodName(method);
+    if (!LLM_TOOL_NAME.test(toolName)) {
+        throw new Error(
+            `Invalid LLM tool name "${toolName}" for method "${method}". ` +
+            `Tool names must match ${LLM_TOOL_NAME}. ` +
+            'Change the method name or namePrefix.',
+        );
+    }
+    return toolName;
+}
+
+export function methodFromToolName(toolName: string, namePrefix = ''): string {
+    if (!LLM_TOOL_NAME.test(toolName)) {
+        throw new Error(
+            `Invalid LLM tool name "${toolName}". Tool names must match ${LLM_TOOL_NAME}.`,
+        );
+    }
+    if (namePrefix.length > 0) {
+        if (!toolName.startsWith(namePrefix)) {
+            throw new Error(
+                `Tool name "${toolName}" does not start with namePrefix "${namePrefix}".`,
+            );
+        }
+        toolName = toolName.slice(namePrefix.length);
+    }
+    if (toolName.length === 0) {
+        throw new Error('LLM tool name has an empty method encoding.');
+    }
+    return decodeMethodName(toolName);
+}
+
 export async function listLlmTools(
     repository: Repository,
     injections: Injections,
     rawOptions?: unknown,
 ): Promise<LlmTools> {
-    const opts = (rawOptions ?? {}) as {
-        includeStreaming?: boolean;
-        prefix?: string;
-    };
-    const { includeStreaming = false, prefix } = opts;
+    const { includeStreaming, prefix, namePrefix } = readLlmToolOptions(rawOptions);
     const tools: LlmTools = [];
     for (const name of repository.list()) {
         if (prefix && !name.startsWith(prefix)) continue;
@@ -294,7 +362,7 @@ export async function listLlmTools(
         tools.push({
             type: 'function',
             function: {
-                name: `${name.replaceAll(/\./g, '_')}`,
+                name: llmToolName(name, namePrefix),
                 description: parts.join('\n\n') || name,
                 parameters: {
                     type: 'object',
@@ -309,8 +377,14 @@ export async function listLlmTools(
     return tools;
 }
 
-export async function invokeLlmTool(repository: Repository, call: LlmToolCall, injections: Injections): Promise<unknown> {
+export async function invokeLlmTool(
+    repository: Repository,
+    call: LlmToolCall,
+    injections: Injections,
+    rawOptions?: unknown,
+): Promise<unknown> {
     const { name, arguments: args } = call;
+    const { namePrefix } = readLlmToolOptions(rawOptions);
     const args_len = Object.keys(args).length;
     const params: unknown[] = [];
     for (let i = 0; i < args_len; i++) {
@@ -318,9 +392,9 @@ export async function invokeLlmTool(repository: Repository, call: LlmToolCall, i
         if (!(key in args)) throw new Error(`Missing tool argument: ${key}`);
         params.push(args[key]);
     }
-    //
+    const method = methodFromToolName(name, namePrefix);
     const rpc_result = await repository.invoke(
-        { jsonrpc: RPCVersion, method: name.replaceAll(/_/g, "."), params, id: `llm-${Date.now()}` },
+        { jsonrpc: RPCVersion, method, params, id: `llm-${Date.now()}` },
         { injections }
     );
 
