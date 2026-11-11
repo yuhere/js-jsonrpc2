@@ -399,6 +399,12 @@ import { codes } from '@yuhere/js-jsonrpc2';
 codes.INVALID_PARAMS; // -32602
 ```
 
+## Demo server
+
+The `js-jsonrpc2` command serves the demo methods and the WebUI. It listens on
+`127.0.0.1` port `5000`. Pass `--host <address>` or set `HOST` to bind a
+different address, and set `PORT` to change the port.
+
 ## License
 
 MIT

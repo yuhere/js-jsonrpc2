@@ -7,7 +7,7 @@
 // 环境变量：
 //   PORT     监听端口（默认 5000；被占用时自动换随机端口）
 //   NO_OPEN  设为 1 时不自动打开浏览器
-//   HOST     监听地址（默认 0.0.0.0）
+//   HOST     监听地址（默认 127.0.0.1；也可用 --host <地址>）
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -28,6 +28,18 @@ export function resolveHtdocDir(moduleDir: string): string {
 
 export function htdocDir(): string {
     return resolveHtdocDir(here);
+}
+
+/** `--host` 优先于 `HOST`，都没有时只监听本机。 */
+export function resolveListenHost(argv: readonly string[], env: NodeJS.ProcessEnv): string {
+    const index = argv.indexOf('--host');
+    const fromFlag = index >= 0 ? argv[index + 1] : undefined;
+    if (fromFlag !== undefined && fromFlag.length > 0 && !fromFlag.startsWith('-')) {
+        return fromFlag;
+    }
+    const fromEnv = env['HOST'];
+    if (fromEnv !== undefined && fromEnv.length > 0) return fromEnv;
+    return '127.0.0.1';
 }
 
 function openBrowser(url: string): void {
@@ -108,7 +120,7 @@ async function main(): Promise<void> {
         }),
     });
 
-    const host = process.env['HOST'] ?? '0.0.0.0';
+    const host = resolveListenHost(process.argv, process.env);
     const requestedPort = Number(process.env['PORT'] ?? 5000);
     const port = await listen(server, host, requestedPort);
 
