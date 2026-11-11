@@ -118,7 +118,7 @@ describe('signatureOf description shape', () => {
         });
     });
 
-    it('stream return uses children.inner (current signatureOf contract)', () => {
+    it('stream return uses top-level inner', () => {
         const d = buildDescriptor(
             {
                 namespace: 'stream.demo',
@@ -130,12 +130,8 @@ describe('signatureOf description shape', () => {
         );
         const [ret] = signatureOf(d) as any[];
         expect(ret.kind).toBe('stream');
-        expect(ret.children).toMatchObject({
-            inner: { kind: 'string', description: 'frame' },
-        });
-        // 若日后对齐为顶层 inner，改为：
-        // expect(ret.inner).toMatchObject({ kind: 'string', description: 'frame' });
-        // expect(ret).not.toHaveProperty('children');
+        expect(ret.inner).toMatchObject({ kind: 'string', description: 'frame' });
+        expect(ret).not.toHaveProperty('children');
     });
 
     it('void return is kind void', () => {
@@ -195,8 +191,9 @@ describe('system.methodSignature integration', () => {
         const sig = (res as { result: unknown[] }).result;
         expect(sig[0]).toMatchObject({
             kind: 'stream',
-            children: { inner: { kind: 'number' } },
+            inner: { kind: 'number' },
         });
+        expect(sig[0]).not.toHaveProperty('children');
         expect(sig[1]).toMatchObject({ kind: 'number' });
     });
 });

@@ -118,7 +118,7 @@ Do **not** read legacy paths such as `children.items` or `children.values`.
 Stream returns are the exception (marker path in `signatureOf`):
 
 ```ts
-{ kind: 'stream', children: { inner: <SchemaDescription> } }
+{ kind: 'stream', inner: <SchemaDescription> }
 ```
 
 ## Stream a return value
@@ -283,7 +283,7 @@ so `system.methodHelp` returns useful text.
 is reported as:
 
 ```ts
-{ kind: 'stream', children: { inner: <schema> } }
+{ kind: 'stream', inner: <schema> }
 ```
 
 Schemas with `.validate(false)` appear with `validate: false` in the signature
@@ -341,7 +341,7 @@ that slot at runtime.
   `.allowUnknownProperties(true)`, or `.strict(false)` to loosen it.
 - **Reading schema descriptions via `children.items` / `children.values`.**
   Those paths are gone. Use `element`, `value`, `properties`, `options`,
-  `elements`. Only stream markers still use `children.inner`.
+  `elements`. Stream markers use top-level `inner`.
 - **Assuming `.validate(false)` still type-checks or coerces.** It only skips
   runtime validation; TypeScript types and the published description stay as
   declared. Use `s.unknown()` when the value truly has no schema.

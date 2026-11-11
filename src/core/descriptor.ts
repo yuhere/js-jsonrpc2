@@ -1,7 +1,13 @@
 import { METHOD_NOT_FOUND, INVALID_PARAMS } from '../errors/codes';
 import { RPCError } from '../errors/RPCError';
 import { InjectableMarker, VoidMarker, StreamMarker, Schema } from '../schema/json';
+import type { SchemaDescription } from '../schema/json';
 import type { RPCDescriptor, RPCHandler, RPCSignature, RPCParamSlot } from '../types';
+
+export interface StreamSlotDescription {
+  kind: 'stream';
+  inner: SchemaDescription;
+}
 
 export interface IndexedParam {
   schema: Schema<unknown>;
@@ -89,7 +95,8 @@ export function signatureOf(descriptor: MethodDescriptor): unknown[] {
     .map((slot) => {
       if (slot instanceof VoidMarker) return { kind: 'void' };
       if (slot instanceof StreamMarker) {
-        return { kind: 'stream', children: { inner: slot.inner.toJSON() } };
+        const described: StreamSlotDescription = { kind: 'stream', inner: slot.inner.toJSON() };
+        return described;
       }
       return slot.toJSON();
     });

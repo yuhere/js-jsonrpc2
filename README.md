@@ -239,11 +239,11 @@ omitted when unset or empty (no `description: ""`).
 When validation is disabled, the description includes `validate: false`.
 The default enabled state is not serialized.
 
-Stream returns from `system.methodSignature` / `signatureOf` currently use a
-small exception for the marker shape:
+Stream returns from `system.methodSignature` / `signatureOf` use a marker
+shape with the inner schema at the top level:
 
 ```ts
-{ kind: 'stream', children: { inner: <SchemaDescription> } }
+{ kind: 'stream', inner: <SchemaDescription> }
 ```
 
 ## Transports

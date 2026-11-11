@@ -262,10 +262,10 @@ s.string().min(1).validate(false)
 // { kind: "string", constraints: { min: 1 }, validate: false }
 ```
 
-**Stream 例外**：`signatureOf` / `system.methodSignature` 对返回位上的 stream 标记目前输出：
+**Stream**：`signatureOf` / `system.methodSignature` 对返回位上的 stream 标记输出：
 
 ```ts
-{ kind: 'stream', children: { inner: <SchemaDescription> } }
+{ kind: 'stream', inner: <SchemaDescription> }
 ```
 
 ## 8. 文件划分
