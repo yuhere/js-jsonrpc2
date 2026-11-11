@@ -2,8 +2,7 @@ import { createServer } from 'node:http';
 import express from 'express';
 import { attachWebSocket, createRepository, createExpressRouter } from '..';
 import { installDemoMethods } from './demo-methods';
-import type { MethodDescriptor } from "../core/descriptor";
-import type { PermCheck } from "../types";
+import type { Injections } from "../types";
 
 const app = express();
 const repository = createRepository({ withSystemMethods: true });
@@ -11,16 +10,14 @@ installDemoMethods(repository);
 
 app.use('/', createExpressRouter(repository, {
     mkInjectable: ({ request, response }, repository) => {
-        const injections = {
+        const injections: Injections = {
             request,
             response,
             repository: repository,
-            perm_check: (() => {
-                return (grantTo: string[], descriptor: MethodDescriptor): boolean => {
-                    console.log("perm_check:", descriptor.namespace, grantTo);
-                    return true;
-                }
-            }) as unknown as PermCheck,
+            perm_check: (grantTo, descriptor) => {
+                console.log("perm_check:", descriptor.namespace, grantTo);
+                return true;
+            },
             requestId: `ws-${Math.random().toString(36).slice(2, 8)}`,
         };
         return injections;
