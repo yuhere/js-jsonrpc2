@@ -13,6 +13,7 @@ Hard constraints (by design, do not work around):
 - No notifications. Every request MUST carry an `id`.
 - No batch. A batch payload returns `-32600 Invalid Request`.
 - No request-side streaming. Only method **return values** can be streamed.
+- `.describe(...)` every client-facing schema slot (see below).
 
 ## Register a method
 
@@ -31,11 +32,15 @@ Hard constraints (by design, do not work around):
    `s.array(item)`, `s.object(shape)`, `s.record(v)`, `s.union([...])`,
    `s.tuple([...])`, `s.enum([...])`, `s.unknown()`.
 7. Chain modifiers before registering:
-   - Bounds / docs: `.min()`, `.max()`, `.describe(text)`.
-   - Nullability: `.nullable()` / `.nullable(true)` / `.nullable(false)` (immutable).
+   - **Docs (do this on every client-facing slot): `.describe(text)`.**
+     The text flows to `system.methodSignature`, the WebUI, and `llm.tools`
+     (where it becomes the parameter's JSON Schema `description`). Describe the
+     *meaning*: `s.number().describe('年龄')`, `s.string().describe('昵称')`.
+     Describe `s.unknown()` too — with no type info, the description is the only
+     hint. Skip only `s.injectable(...)`, and slots already unambiguous from
+     `document` + parameter order.
    - Validation gate: `.validate(true|false)` (immutable; default **on**).
-     - Schemas serve two roles: **describe** the RPC signature and **validate**
-       client params at runtime.
+     Schemas both describe the signature and validate client params at runtime.
      - `.validate(false)` keeps the schema in `signature` / `system.methodSignature`
        / WebUI / docs, but `parse` / `safeParse` become no-ops (return the input
        unchanged). `convertParams` therefore will not reject bad values for that
@@ -64,7 +69,15 @@ import { createRepository, s } from '@yuhere/js-jsonrpc2';
 
 const repository = createRepository();
 repository.register(
-  { namespace: 'add', document: 'a + b', signature: [s.number(), s.number(), s.number()] },
+  {
+    namespace: 'add',
+    document: 'a + b',
+    signature: [
+      s.number().describe('两数之和'),
+      s.number().describe('被加数 a'),
+      s.number().describe('加数 b'),
+    ],
+  },
   (a: number, b: number) => a + b,
 );
 
@@ -73,13 +86,36 @@ repository.register(
   {
     namespace: 'legacy.passthrough',
     signature: [
-      s.unknown(),
-      s.object({ id: s.number(), tags: s.array(s.string()) }).validate(false),
+      s.unknown().describe('原样返回（无 schema）'),
+      s
+        .object({
+          id: s.number().describe('记录 ID'),
+          tags: s.array(s.string()).describe('标签列表'),
+        })
+        .validate(false)
+        .describe('用户记录（仅文档，不校验）'),
     ],
   },
   (payload) => payload,
 );
 ```
+
+### Always describe client-facing slots
+
+`.describe(text)` is the only way a caller or an LLM learns what a parameter
+means. It appears in three places generated from the signature:
+
+- `system.methodSignature` → `description` on the slot
+- WebUI → parameter label
+- `llm.tools` → `function.parameters.properties.paramN.description`, appended
+  after the positional prefix `第 N 个位置参数`
+
+Put the meaning, not the type: `s.number().describe('年龄')`. For object
+fields, describe each field and the container. This applies to `s.unknown()`
+too — the type says nothing, so the description is the only semantic hint.
+The only slots without a description are `s.injectable(...)` (server-filled,
+never shown to clients) and slots already unambiguous from `document` plus
+parameter order.
 
 ### Schema descriptions (`toJSON` / `system.methodSignature`)
 
@@ -133,6 +169,7 @@ Otherwise the plain value is returned in `result`.
 2. Make the handler an `async function*` that yields values matching `inner`.
 3. Do NOT rely on `inner` for runtime chunk validation — chunks are **not**
    validated. `inner` is documentation only; the WebUI uses it to render types.
+   Describe `inner` so the WebUI can label the stream.
 4. Expect frames of shape `RPCStreamChunk`, each a **complete** JSON-RPC-shaped
    object (not nested under `result`):
    `{ jsonrpc, id, done, index?, value?, error? }`.
@@ -152,7 +189,10 @@ repository.register(
   {
     namespace: 'logs.tail',
     document: 'stream log lines',
-    signature: [s.stream(s.string()), s.string()],
+    signature: [
+      s.stream(s.string().describe('一行日志')).describe('日志行流'),
+      s.string().describe('日志文件路径'),
+    ],
   },
   async function* tail(path: string) {
     for await (const line of follow(path)) yield line;
@@ -304,9 +344,10 @@ is reported as:
 { kind: 'stream', inner: <schema> }
 ```
 
-Schemas with `.validate(false)` appear with `validate: false` in the signature
-description so clients and the WebUI can show that the server will not enforce
-that slot at runtime.
+Every slot's `.describe(text)` appears as `description`. Schemas with
+`.validate(false)` appear with `validate: false` in the signature description so
+clients and the WebUI can show that the server will not enforce that slot at
+runtime.
 
 ## Common mistakes
 
@@ -321,6 +362,10 @@ that slot at runtime.
   first slot is the return type.
 - **Forgetting `mkInjectable` for a `s.injectable(key)` slot.** `convertParams`
   throws `INVALID_PARAMS` for the missing key.
+- **Skipping `.describe()` on client params.** The signature still validates,
+  but `system.methodSignature`, the WebUI, and `llm.tools` show only the type
+  and position. An LLM calling the tool gets `第 N 个位置参数` with no semantic
+  hint. Describe every client-facing slot.
 - **Expecting `errorTransform` to catch validation errors.** It only wraps the
   handler call.
 - **Declaring `s.stream(inner)` but returning a plain value from the handler.**

@@ -47,7 +47,11 @@ repository.register(
   {
     namespace: 'add',
     document: 'addition of 2 numbers',
-    signature: [s.number(), s.number(), s.number()],
+    signature: [
+      s.number().describe('两数之和'),
+      s.number().describe('被加数 a'),
+      s.number().describe('加数 b'),
+    ],
   },
   (a: number, b: number) => a + b,
 );
@@ -90,7 +94,9 @@ repository.register(
     namespace: 'whoami',
     document: 'returns the caller user agent',
     signature: [
-      s.object({ userAgent: s.string().nullable() }),
+      s.object({
+        userAgent: s.string().nullable().describe('请求头 user-agent，缺失时为 null'),
+      }).describe('调用者信息'),
       s.injectable('request'),
     ],
   },
@@ -110,33 +116,81 @@ Schemas serve two roles:
 They are built with the `s` factory. They validate at runtime (unless turned off) and derive TypeScript types.
 
 ```ts
-s.string()                 // string
-s.string().min(1).max(64)  // length-constrained string
-s.number()                 // finite number
-s.boolean()                // boolean
-s.literal('2.0')           // exact literal (string | number | boolean only)
-s.null()                   // exactly null
-s.array(s.string())        // string[]
-s.object({ id: s.number() })                        // all declared props required; extras rejected
-s.object({ id: s.number() }).optionalProperties(['id']) // id may be omitted
-s.record(s.number())       // Record<string, number>
-s.union([s.string(), s.number()])
-s.tuple([s.string(), s.number()])
-s.enum(['pending', 'success', 'failed'])
-s.unknown()                // any JSON value (already includes null)
-s.void()                   // RPC-only: no return value
-s.stream(s.string())       // RPC-only: streaming return (AsyncGenerator)
-s.injectable('request')    // RPC-only: server-injected parameter
+s.string().describe('任意字符串')
+s.string().min(1).max(64).describe('1~64 字符的短文本')
+s.number().describe('有限数字')
+s.boolean().describe('布尔开关')
+s.literal('2.0').describe('固定字面量 "2.0"')
+s.null().describe('精确的 null')
+s.array(s.string()).describe('字符串数组')
+s.object({ id: s.number().describe('主键') }).describe('用户对象') // all declared props required; extras rejected
+s.object({ id: s.number().describe('主键') }).optionalProperties(['id']).describe('可省略 id 的对象')
+s.record(s.number()).describe('字符串键到数字的映射')
+s.union([s.string(), s.number()]).describe('字符串或数字')
+s.tuple([s.string(), s.number()]).describe('[名称, 数量]')
+s.enum(['pending', 'success', 'failed']).describe('任务状态')
+s.unknown().describe('任意 JSON value（already includes null）')
+s.void()                                   // RPC-only: no return value
+s.stream(s.string().describe('日志行')).describe('日志行流') // RPC-only: streaming return
+s.injectable('request')                    // RPC-only: server-injected; no describe needed
 ```
+
+> The `describe` calls above are illustrative; in real code put the *meaning*
+> of each parameter, not a restatement of the type.
+
+### Describing parameters with `.describe()`
+
+`.describe(text)` attaches a human-readable meaning to a schema. It is not
+cosmetic — the text is surfaced to every consumer of the signature:
+
+- `system.methodSignature` / `signatureOf` → `description` on the slot
+- the bundled WebUI → parameter labels
+- `llm.tools` → each parameter's JSON Schema `description`, which is what an
+  LLM sees when deciding how to fill the argument
+
+Prefer describing **meaning**, not type. `s.number().describe('年龄')` tells a
+caller more than `s.number().describe('number')`.
+
+```ts
+signature: [
+  s.number().describe('两数之和'),
+  s.number().min(0).describe('年龄（非负）'),
+  s.string().describe('昵称'),
+]
+```
+
+This applies to s.unknown() as well. The type carries no information there,
+so the description is the only semantic hint:
+
+```ts
+s.unknown().describe('webhook 负载，形状由第三方决定')
+```
+
+For nested objects, describe the object and its fields:
+
+```ts
+s.object({
+  id: s.number().describe('用户 ID'),
+  profile: s.object({
+    name: s.string().describe('姓名'),
+    tags: s.array(s.string()).describe('标签'),
+  }).describe('用户资料'),
+}).describe('用户')
+```
+
+Slots that do not need a description: `s.injectable(...)` is server-filled and
+never shown to clients, and a slot whose meaning is already unambiguous from
+`document` plus parameter order may omit it. Everything else — including
+`s.unknown()` — should be described.
 
 ### Chainable modifiers
 
 | Modifier | Applies to | Meaning |
 | --- | --- | --- |
+| `.describe(text)` | all schemas | Human-readable description. Shown in `system.methodSignature`, the WebUI, and as the parameter `description` in `llm.tools`. Describe the *meaning*. |
 | `.min(n)` / `.max(n)` | string (length), number (bounds), array / record (size) | Inclusive bounds. |
 | `.nullable()` / `.nullable(true)` | most schemas | Allow `null`. Immutable; returns a new schema. |
 | `.nullable(false)` | same | Clear a previous nullable flag. |
-| `.describe(text)` | all schemas | Human-readable description (shown in WebUI / docs). |
 | `.validate(false)` / `.validate(true)` | all schemas | Toggle runtime validation. Default is **on**. When off, `parse` / `safeParse` accept any value and return it unchanged; the schema still describes the type for signatures and the WebUI. |
 | `.optionalProperties(keys)` | object | Whitelist of declared keys that may be missing. |
 | `.allowUnknownProperties(bool)` | object | Whether undeclared keys are kept (`true`) or rejected (`false`). |
@@ -156,13 +210,13 @@ shape is only documentary:
 ```ts
 // Still appears as string in system.methodSignature / WebUI,
 // but convertParams will not reject non-strings.
-s.string().validate(false)
+s.string().describe('任意输入，不校验').validate(false)
 
 // Nested: only the inner schema skips checks
 s.object({
-  id: s.number(),
-  payload: s.unknown().validate(false),
-})
+  id: s.number().describe('记录 ID'),
+  payload: s.unknown().describe('任意负载').validate(false),
+}).describe('含未校验负载的记录')
 ```
 
 - Default is `validate: true` (omitted from `toJSON()` to keep descriptions small).
@@ -182,7 +236,11 @@ By default an object schema is **strict**:
 - undeclared properties are rejected.
 
 ```ts
-const closed = s.object({ name: s.string(), age: s.number() });
+const closed = s.object({
+  name: s.string().describe('姓名'),
+  age: s.number().describe('年龄'),
+}).describe('用户');
+
 closed.parse({ name: 'Ada', age: 30 });             // ok
 closed.parse({});                                   // error: missing name, age
 closed.parse({ name: 'Ada', age: 30, extra: 1 });   // error: unknown property
@@ -193,13 +251,20 @@ Loosen each aspect independently:
 
 ```ts
 // only `age` may be missing; extras are still rejected
-s.object({ name: s.string(), age: s.number() }).optionalProperties(['age']);
+s.object({
+  name: s.string().describe('姓名'),
+  age: s.number().describe('年龄'),
+}).optionalProperties(['age']).describe('用户（age 可选）');
 
 // every declared key is still required, but unknown keys are kept
-s.object({ name: s.string() }).allowUnknownProperties(true);
+s.object({ name: s.string().describe('姓名') })
+  .allowUnknownProperties(true)
+  .describe('用户（保留额外字段）');
 
 // fully permissive: all declared keys optional + unknown keys kept
-s.object({ name: s.string() }).strict(false);
+s.object({ name: s.string().describe('姓名') })
+  .strict(false)
+  .describe('用户（全宽松）');
 ```
 
 `optionalProperties` rejects key names that are not in the shape (throws
@@ -326,7 +391,10 @@ repository.register(
   {
     namespace: 'logs.tail',
     document: 'stream log lines',
-    signature: [s.stream(s.string()), s.string()],
+    signature: [
+      s.stream(s.string().describe('一行日志')).describe('日志行流'),
+      s.string().describe('日志文件路径'),
+    ],
   },
   async function* tail(path: string) {
     yield path;
@@ -342,15 +410,32 @@ Each frame is `{ jsonrpc, id, done, index?, value?, error? }`.
 `llm.tools` lists OpenAI-style tools for methods the caller may invoke.
 Parameters are positional and named `param0`, `param1`, … in signature order.
 Injectable slots are skipped. Each parameter description starts with
-`第 N 个位置参数`. Pass `{ format: 'anthropic' }` for
-`{ name, description, input_schema }`. The default format is `openai`.
+`第 N 个位置参数`, then the slot's `.describe(text)` (when present). Pass
+`{ format: 'anthropic' }` for `{ name, description, input_schema }`. The
+default format is `openai`.
 
 ```ts
+repository.register(
+  {
+    namespace: 'user.create',
+    document: 'create a user',
+    signature: [
+      s.object({ id: s.number().describe('新用户 ID') }).describe('创建结果'),
+      s.string().min(1).describe('昵称'),
+      s.number().min(0).describe('年龄（非负）'),
+    ],
+  },
+  (name: string, age: number) => ({ id: 1 }),
+);
+
 const listed = await repository.invoke(
-  { jsonrpc: '2.0', method: 'llm.tools', params: [{ prefix: 'math.' }], id: 1 },
+  { jsonrpc: '2.0', method: 'llm.tools', params: [{ prefix: 'user.' }], id: 1 },
   { injections: { repository } },
 );
-// listed.result[0].function.parameters.properties.param0
+// listed.result[0].function.parameters.properties.param0.description
+//   => "第 1 个位置参数。昵称"
+// listed.result[0].function.parameters.properties.param1.description
+//   => "第 2 个位置参数。年龄（非负）"
 ```
 
 Code can convert an OpenAI list with `toAnthropicTools(tools)`.
@@ -458,6 +543,10 @@ createExpressRouter(repository, {
 - Every request needs a string or number `id`. There is no notification or batch support.
 - The descriptor fields are `signature` and `document`, not `sign` or `doc`.
 - `s.injectable()` cannot be `signature[0]`.
+- **Leaving client-facing schemas undescribed.** `describe` is what shows up in
+  `system.methodSignature`, the WebUI, and `llm.tools`. A bare `s.number()` gives
+  an LLM only the position (`第 N 个位置参数`) and no meaning. A bare
+  `s.unknown()` gives it neither type nor meaning.
 - `perm_check` is called as `(grantTo, descriptor, injections)`. A zero-argument function that returns the real checker is denied, not unwrapped.
 - `errorTransform` does not see validation errors.
 - `s.stream(inner)` streams only when the handler returns an async iterable. `inner` is not applied to each chunk.

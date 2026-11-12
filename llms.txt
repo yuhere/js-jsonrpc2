@@ -10,6 +10,7 @@ README sections:
 
 - Deviations from JSON-RPC 2.0
 - Schemas, including object strictness and nullable
+- Describing parameters with `.describe()` (shown in methodSignature / WebUI / llm.tools)
 - Streaming returns
 - llm.tools (param0, param1, … and format)
 - Web client (timeout, httpCallOptions, AbortSignal)
